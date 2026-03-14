@@ -68,6 +68,23 @@ function init(tweetId) {
   `;
   document.body.appendChild(el);
 
+  // Persist config inputs across reloads
+  const configKeys = ['shave-pat', 'shave-repo', 'shave-proxy'];
+  chrome.storage?.local?.get(configKeys, (saved) => {
+    for (const k of configKeys) {
+      const input = el.querySelector(`#${k}`);
+      if (input && saved[k]) input.value = saved[k];
+    }
+  });
+  for (const k of configKeys) {
+    el.querySelector(`#${k}`)?.addEventListener('change', (e) => {
+      chrome.storage?.local?.set({ [k]: e.target.value });
+    });
+    el.querySelector(`#${k}`)?.addEventListener('blur', (e) => {
+      chrome.storage?.local?.set({ [k]: e.target.value });
+    });
+  }
+
   const canvas = el.querySelector('#shave-canvas');
   const ctx = canvas.getContext('2d');
   const statusEl = el.querySelector('#shave-status');
