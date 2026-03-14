@@ -53,10 +53,11 @@ function init(tweetId) {
     <canvas id="shave-canvas" width="180" height="180"></canvas>
     <div class="status" id="shave-status">Click the like button when the dot hits a marker</div>
     <div class="result" id="shave-result"></div>
+    <div class="hint">doot doo-da-loot doot &hellip; doot doot!</div>
     <div class="actions">
+      <button class="btn" id="shave-start-observer" style="border-color:#1d9bf0;color:#1d9bf0">Start Observer</button>
       <button class="btn" id="shave-reset">Reset</button>
     </div>
-    <div class="hint">doot doo-da-loot doot &hellip; doot doot!</div>
     <div class="observer" id="shave-observer"></div>
     <canvas id="shave-timeline" width="240" height="50" style="display:none;margin-top:6px;border-radius:6px;background:#0d0d0d;border:1px solid #262626"></canvas>
   `;
@@ -368,6 +369,52 @@ function init(tweetId) {
   const observer = new MutationObserver(hookLikeButton);
   observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-testid'] });
   hookLikeButton();
+
+  el.querySelector('#shave-start-observer').addEventListener('click', async () => {
+    const btn = el.querySelector('#shave-start-observer');
+    btn.disabled = true;
+    btn.textContent = 'Starting...';
+    observerEl.classList.add('active');
+    observerEl.innerHTML = '<span class="label">Observer</span>Dispatching workflow...';
+
+    try {
+      const cfg = await new Promise(r => chrome.storage.local.get(['ghToken', 'repo', 'gistId'], r));
+      if (!cfg.ghToken) throw new Error('Set GitHub token in extension popup first');
+      if (!cfg.gistId) throw new Error('Set up gist in extension popup first');
+
+      // Reset the gist to idle state
+      await fetch(`https://api.github.com/gists/${cfg.gistId}`, {
+        method: 'PATCH',
+        headers: { 'Authorization': `Bearer ${cfg.ghToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files: { 'status.json': { content: JSON.stringify({status: 'waiting'}) } } }),
+      });
+
+      // Dispatch the twitter-like workflow
+      const dispatchRes = await fetch(`https://api.github.com/repos/${cfg.repo}/actions/workflows/twitter-like.yml/dispatches`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${cfg.ghToken}`, 'Accept': 'application/vnd.github.v3+json' },
+        body: JSON.stringify({ ref: 'main', inputs: { tweet_id: tweetId } }),
+      });
+
+      if (!dispatchRes.ok) throw new Error(`Dispatch failed: ${dispatchRes.status}`);
+
+      btn.textContent = 'Running';
+      btn.style.borderColor = '#22c55e';
+      btn.style.color = '#22c55e';
+      observerEl.innerHTML = '<span class="label">Observer</span>Workflow dispatched. Waiting for runner (~30s)...';
+
+      // Switch to gist polling mode
+      observerMode = 'gist';
+      OBSERVER_URL = `https://api.github.com/gists/${cfg.gistId}`;
+      observerDone = false;
+      pollObserverLoop();
+
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = 'Start Observer';
+      observerEl.innerHTML = `<span class="label">Observer</span>${e.message}`;
+    }
+  });
 
   el.querySelector('#shave-reset').addEventListener('click', reset);
   el.querySelector('#shave-close').addEventListener('click', () => {

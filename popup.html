@@ -8,87 +8,95 @@ body { font-family: system-ui; background: #0a0a0a; color: #e5e5e5; width: 360px
 h1 { font-size: 16px; margin-bottom: 4px; }
 .sub { font-size: 11px; color: #888; margin-bottom: 16px; }
 label { font-size: 11px; color: #888; display: block; margin-bottom: 3px; }
-input, select { background: #1a1a1a; color: #e5e5e5; border: 1px solid #333; border-radius: 6px; padding: 5px 8px; font-size: 12px; width: 100%; }
+input { background: #1a1a1a; color: #e5e5e5; border: 1px solid #333; border-radius: 6px; padding: 5px 8px; font-size: 12px; width: 100%; }
 .field { margin-bottom: 12px; }
-.btn { padding: 6px 14px; border-radius: 6px; border: 1px solid #333; background: #1a1a1a; color: #e5e5e5; font-size: 12px; cursor: pointer; }
+.btn { padding: 6px 14px; border-radius: 6px; border: 1px solid #333; background: #1a1a1a; color: #e5e5e5; font-size: 12px; cursor: pointer; width: 100%; }
 .btn:hover { background: #262626; }
 .btn.primary { border-color: #1d9bf0; color: #1d9bf0; }
 .btn.primary:hover { background: #1d9bf022; }
-.actions { display: flex; gap: 8px; margin-top: 12px; }
-#status { font-size: 11px; color: #888; margin-top: 8px; min-height: 14px; }
+#status { font-size: 11px; color: #888; margin-top: 10px; min-height: 28px; white-space: pre-wrap; }
+.ok { color: #22c55e; }
+.err { color: #ef4444; }
 hr { border: none; border-top: 1px solid #262626; margin: 12px 0; }
 </style>
 </head>
 <body>
   <h1>Login with Anything</h1>
-  <p class="sub">Configure observer and dispatch workflows</p>
+  <p class="sub">Paste a GitHub PAT. The extension handles the rest.</p>
 
   <div class="field">
-    <label>Observer Mode</label>
-    <select id="mode">
-      <option value="local">Local (localhost:3456)</option>
-      <option value="gist">GitHub Gist</option>
-    </select>
-  </div>
-
-  <div class="field" id="gist-fields" style="display:none">
-    <label>Gist ID (for status signaling)</label>
-    <input id="gist-id" type="text" placeholder="abc123...">
-    <label style="margin-top:6px">GitHub Token</label>
+    <label>GitHub Token (needs gist + actions scope)</label>
     <input id="gh-token" type="password" placeholder="ghp_...">
   </div>
 
-  <hr>
   <div class="field">
-    <label>GitHub Repo</label>
+    <label>Repo</label>
     <input id="repo" type="text" value="amiller/login-with-anything">
   </div>
 
-  <div class="actions">
-    <button class="btn primary" id="save">Save Settings</button>
-    <button class="btn" id="dispatch-star">Dispatch: Star</button>
-  </div>
+  <button class="btn primary" id="save">Save</button>
   <div id="status"></div>
 
 <script>
 const $ = id => document.getElementById(id);
+const status = (msg, cls) => { $('status').textContent = msg; $('status').className = cls || ''; };
 
-$('mode').addEventListener('change', () => {
-  $('gist-fields').style.display = $('mode').value === 'gist' ? 'block' : 'none';
-});
-
-// Load saved settings
-chrome.storage.local.get(['observerMode', 'gistId', 'ghToken', 'repo'], cfg => {
-  if (cfg.observerMode) $('mode').value = cfg.observerMode;
-  if (cfg.gistId) $('gist-id').value = cfg.gistId;
+chrome.storage.local.get(['ghToken', 'repo', 'gistId'], cfg => {
   if (cfg.ghToken) $('gh-token').value = cfg.ghToken;
   if (cfg.repo) $('repo').value = cfg.repo;
-  $('mode').dispatchEvent(new Event('change'));
+  if (cfg.gistId) status(`Ready. Gist: ${cfg.gistId}`, 'ok');
 });
 
-$('save').addEventListener('click', () => {
-  chrome.storage.local.set({
-    observerMode: $('mode').value,
-    gistId: $('gist-id').value,
-    ghToken: $('gh-token').value,
-    repo: $('repo').value,
-  });
-  $('status').textContent = 'Saved';
-});
+$('save').addEventListener('click', async () => {
+  const ghToken = $('gh-token').value.trim();
+  const repo = $('repo').value.trim();
+  if (!ghToken) { status('Need a token', 'err'); return; }
 
-$('dispatch-star').addEventListener('click', async () => {
-  const cfg = await chrome.storage.local.get(['ghToken', 'repo']);
-  if (!cfg.ghToken) { $('status').textContent = 'Need GitHub token'; return; }
-  $('status').textContent = 'Dispatching...';
-  const res = await fetch(`https://api.github.com/repos/${cfg.repo}/actions/workflows/github-star.yml/dispatches`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${cfg.ghToken}`,
-      'Accept': 'application/vnd.github.v3+json',
-    },
-    body: JSON.stringify({ ref: 'main', inputs: { repo: cfg.repo } }),
+  status('Checking token...');
+  const userRes = await fetch('https://api.github.com/user', {
+    headers: { 'Authorization': `Bearer ${ghToken}` },
   });
-  $('status').textContent = res.ok ? 'Dispatched! Star/unstar the repo in rhythm.' : `Error: ${res.status}`;
+  if (!userRes.ok) { status(`Bad token: ${userRes.status}`, 'err'); return; }
+  const user = await userRes.json();
+  status(`Token OK: ${user.login}\nCreating signal gist...`);
+
+  // Create or reuse a signaling gist
+  let gistId;
+  const existing = await chrome.storage.local.get('gistId');
+  if (existing.gistId) {
+    // Verify it still exists
+    const check = await fetch(`https://api.github.com/gists/${existing.gistId}`, {
+      headers: { 'Authorization': `Bearer ${ghToken}` },
+    });
+    if (check.ok) {
+      gistId = existing.gistId;
+      status(`Token OK: ${user.login}\nReusing gist: ${gistId}`);
+    }
+  }
+
+  if (!gistId) {
+    const gistRes = await fetch('https://api.github.com/gists', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${ghToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        description: 'login-with-anything signal',
+        public: false,
+        files: { 'status.json': { content: JSON.stringify({status: 'idle'}) } },
+      }),
+    });
+    if (!gistRes.ok) { status(`Failed to create gist: ${gistRes.status}`, 'err'); return; }
+    const gist = await gistRes.json();
+    gistId = gist.id;
+  }
+
+  await chrome.storage.local.set({
+    ghToken,
+    repo,
+    gistId,
+    observerMode: 'gist',
+  });
+
+  status(`Saved!\nUser: ${user.login}\nGist: ${gistId}\nRepo: ${repo}`, 'ok');
 });
 </script>
 </body>
