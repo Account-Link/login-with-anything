@@ -11,7 +11,7 @@ const BASE_URL = process.env.TWITTER_PROXY || 'https://x.com';
 const tweetId = process.env.TWEET_ID;
 const cookies = JSON.parse(process.env.TWITTER_COOKIES);
 
-const T_REF = 700;
+const T_REF = 1400;
 const PATTERN = [0, T_REF, 1.5*T_REF, 2*T_REF, 3*T_REF, 5*T_REF, 6*T_REF];
 
 if (!tweetId) { console.error('TWEET_ID required'); process.exit(1); }

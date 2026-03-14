@@ -9,7 +9,7 @@ if (location.hostname === 'x.com' && location.pathname.match(/\/status\/\d+/)) {
 function init(tweetId) {
   // "Shave and-a hair cut ... two bits (rest)"
   //    1    2  +  3    4        6    7    8(rest)
-  const T = 700;
+  const T = 1400;
   const BEATS = [0, T, 1.5*T, 2*T, 3*T, 5*T, 6*T];
   const REST = 7 * T; // beat 8 = rest, completes the cycle
   const CYCLE_MS = 8 * T;
@@ -385,6 +385,87 @@ function init(tweetId) {
     }
   }
 
+  // Server tap observations for time series
+  const serverTaps = [];
+  const tlCanvas = el.querySelector('#shave-timeline');
+  const tlCtx = tlCanvas.getContext('2d');
+
+  function drawObserverTimeline() {
+    if (!serverTaps.length) return;
+    tlCanvas.style.display = 'block';
+    observerEl.classList.add('active');
+
+    const W = tlCanvas.width, H = tlCanvas.height;
+    tlCtx.clearRect(0, 0, W, H);
+
+    const t0 = serverTaps[0].client_ts;
+    const tEnd = serverTaps[serverTaps.length - 1].client_ts;
+    const range = Math.max(tEnd - t0, 1000);
+    const pad = 4;
+
+    // Background
+    tlCtx.fillStyle = '#0d0d0d';
+    tlCtx.fillRect(0, 0, W, H);
+
+    // Draw liked/unliked regions
+    for (let i = 0; i < serverTaps.length; i++) {
+      const s = serverTaps[i];
+      const x = pad + ((s.client_ts - t0) / range) * (W - 2 * pad);
+      const nextX = (i + 1 < serverTaps.length)
+        ? pad + ((serverTaps[i + 1].client_ts - t0) / range) * (W - 2 * pad)
+        : W - pad;
+
+      // Filled region: top half = liked, bottom half = unliked
+      const y = s.liked ? pad : H / 2;
+      const h = H / 2 - pad;
+      tlCtx.fillStyle = s.liked ? 'rgba(239,68,68,0.25)' : 'rgba(100,100,100,0.15)';
+      tlCtx.fillRect(x, y, nextX - x, h);
+    }
+
+    // Center line
+    tlCtx.strokeStyle = '#333';
+    tlCtx.lineWidth = 1;
+    tlCtx.beginPath();
+    tlCtx.moveTo(pad, H / 2);
+    tlCtx.lineTo(W - pad, H / 2);
+    tlCtx.stroke();
+
+    // Draw tap dots and step line
+    tlCtx.strokeStyle = '#1d9bf0';
+    tlCtx.lineWidth = 1.5;
+    tlCtx.beginPath();
+    for (let i = 0; i < serverTaps.length; i++) {
+      const s = serverTaps[i];
+      const x = pad + ((s.client_ts - t0) / range) * (W - 2 * pad);
+      const y = s.liked ? H * 0.25 : H * 0.75;
+      if (i === 0) tlCtx.moveTo(x, y); else tlCtx.lineTo(x, y);
+
+      // Dot
+      tlCtx.fillStyle = s.changed ? '#22c55e' : (s.error ? '#ef4444' : '#1d9bf0');
+      tlCtx.fillRect(x - 3, y - 3, 6, 6);
+    }
+    tlCtx.stroke();
+
+    // Labels
+    tlCtx.fillStyle = '#666';
+    tlCtx.font = '8px system-ui';
+    tlCtx.textAlign = 'left';
+    tlCtx.fillText('\u2665 liked', pad, 10);
+    tlCtx.fillText('\u2661 unliked', pad, H - 3);
+    tlCtx.textAlign = 'right';
+    tlCtx.fillText(`${serverTaps.length}/7 taps`, W - pad, 10);
+
+    // Show result text
+    const last = serverTaps[serverTaps.length - 1];
+    if (last.result) {
+      const r = last.result;
+      observerEl.innerHTML = `<span class="label">Observer: ${last.status?.toUpperCase()}</span>` +
+        (r.valid ? `Duration: ${(r.duration/1000).toFixed(1)}s Tempo: ${r.scale.toFixed(2)}x` : r.reason);
+    } else {
+      observerEl.innerHTML = `<span class="label">Observer</span>${serverTaps.length}/7 verified`;
+    }
+  }
+
   function onLikeClick(e) {
     if (!listening || taps.length >= 7) return;
 
@@ -394,22 +475,11 @@ function init(tweetId) {
     const wasLiked = btn.getAttribute('data-testid') === 'unlike';
     statusEl.textContent = `${i}/7: ${wasLiked ? 'unliked' : 'liked'}`;
 
-    // Send tap to runner and show server response
+    // Send tap to runner and draw time series
     notifyTap(taps.length - 1).then(resp => {
       if (!resp) return;
-      if (resp.error) {
-        observerEl.innerHTML = `<span class="label">Observer</span>Tap ${resp.tap || i}: ${resp.error}`;
-        return;
-      }
-      let obs = `<span class="label">Observer</span>`;
-      obs += `Tap ${resp.tap}/7: ${resp.liked ? 'liked' : 'unliked'} ${resp.changed ? '(changed)' : '(same)'}`;
-      if (resp.result) {
-        obs += `\n\nResult: ${resp.status?.toUpperCase()}`;
-        if (resp.result.valid) obs += `\nDuration: ${(resp.result.duration/1000).toFixed(2)}s Tempo: ${resp.result.scale.toFixed(2)}x`;
-        else obs += `\nReason: ${resp.result.reason}`;
-      }
-      observerEl.classList.add('active');
-      observerEl.innerHTML = obs;
+      serverTaps.push({ ...resp, client_ts: Date.now() });
+      drawObserverTimeline();
     });
 
     if (taps.length === 7) {
