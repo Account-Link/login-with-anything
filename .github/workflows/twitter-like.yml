@@ -6,6 +6,9 @@ on:
       tweet_id:
         description: 'Tweet ID to observe'
         required: true
+      gist_id:
+        description: 'Gist ID for status signaling'
+        required: true
 
 permissions:
   id-token: write
@@ -22,7 +25,7 @@ jobs:
         env:
           TWEET_ID: ${{ inputs.tweet_id }}
           TWITTER_COOKIES: ${{ secrets.TWITTER_COOKIES }}
-          GIST_ID: ${{ secrets.SIGNAL_GIST_ID }}
+          GIST_ID: ${{ inputs.gist_id }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           POLL_INTERVAL: '500'
           TIMEOUT: '120000'

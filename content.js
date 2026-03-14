@@ -404,7 +404,7 @@ function init(tweetId) {
       const dispatchRes = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/twitter-like.yml/dispatches`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${ghToken}`, 'Accept': 'application/vnd.github.v3+json' },
-        body: JSON.stringify({ ref: 'main', inputs: { tweet_id: tweetId } }),
+        body: JSON.stringify({ ref: 'main', inputs: { tweet_id: tweetId, gist_id: gistId } }),
       });
       if (!dispatchRes.ok) throw new Error(`Dispatch failed: ${dispatchRes.status}`);
 
