@@ -202,7 +202,7 @@ function init(tweetId) {
     listening = true;
     cycleStart = Date.now();
     lastClickedBeat = -1;
-    observerDone = true; // stop old poll loop
+    serverTaps.length = 0;
     statusEl.textContent = 'Click the like button when the dot hits a marker';
     statusEl.style.color = '#888';
     resultEl.textContent = '';
@@ -234,140 +234,7 @@ function init(tweetId) {
     return { valid: true, scale, duration: t[6] };
   }
 
-  // Poll the observer (poller container / GitHub Actions) for its report
-  // Observer endpoint — local result server or GitHub gist
-  // Set via chrome.storage.local: {observerMode: 'local'|'gist', gistId: '...', ghToken: '...'}
-  let OBSERVER_URL = 'http://localhost:3456';
-  let observerMode = 'local';
-
-  chrome.storage?.local?.get(['observerMode', 'gistId', 'ghToken'], (cfg) => {
-    if (!cfg) return;
-    observerMode = cfg.observerMode || 'local';
-    if (observerMode === 'gist' && cfg.gistId) {
-      OBSERVER_URL = `https://api.github.com/gists/${cfg.gistId}`;
-    }
-  });
   const observerEl = el.querySelector('#shave-observer');
-
-  // Continuously poll the observer and draw live time series
-  let observerDone = false;
-  const tlCanvas = el.querySelector('#shave-timeline');
-  const tlCtx = tlCanvas.getContext('2d');
-
-  function drawTimeline(stateLog) {
-    if (!stateLog || !stateLog.length) return;
-    tlCanvas.style.display = 'block';
-    const W = tlCanvas.width, H = tlCanvas.height;
-    tlCtx.clearRect(0, 0, W, H);
-
-    const maxT = stateLog[stateLog.length - 1].t;
-    const minT = Math.max(0, maxT - 15000); // show last 15 seconds
-    const range = Math.max(maxT - minT, 1000);
-
-    // Draw like state as filled regions
-    for (let i = 0; i < stateLog.length; i++) {
-      const s = stateLog[i];
-      if (s.t < minT) continue;
-      const x = ((s.t - minT) / range) * W;
-      const nextT = (i + 1 < stateLog.length) ? Math.min(stateLog[i + 1].t, maxT) : maxT;
-      const x2 = ((nextT - minT) / range) * W;
-
-      tlCtx.fillStyle = s.liked ? 'rgba(239,68,68,0.3)' : 'rgba(68,68,68,0.15)';
-      tlCtx.fillRect(x, 0, x2 - x, H);
-
-      // Heart/empty at transitions
-      if (i > 0 && stateLog[i].liked !== stateLog[i - 1].liked) {
-        tlCtx.fillStyle = s.liked ? '#ef4444' : '#888';
-        tlCtx.beginPath();
-        tlCtx.arc(x, H / 2, 3, 0, Math.PI * 2);
-        tlCtx.fill();
-      }
-    }
-
-    // Sweeping cursor line at right edge
-    tlCtx.strokeStyle = '#1d9bf0';
-    tlCtx.lineWidth = 1;
-    tlCtx.beginPath();
-    tlCtx.moveTo(W - 1, 0);
-    tlCtx.lineTo(W - 1, H);
-    tlCtx.stroke();
-
-    // Labels
-    tlCtx.fillStyle = '#555';
-    tlCtx.font = '9px system-ui';
-    tlCtx.textAlign = 'left';
-    tlCtx.fillText(s_liked_label(stateLog), 4, 12);
-    tlCtx.textAlign = 'right';
-    tlCtx.fillText(`${(range / 1000).toFixed(0)}s`, W - 4, H - 4);
-  }
-
-  function s_liked_label(log) {
-    const last = log[log.length - 1];
-    return last.liked ? '\u2665 liked' : '\u2661 not liked';
-  }
-
-  async function pollObserverLoop() {
-    while (!observerDone) {
-      await new Promise(r => setTimeout(r, 400));
-      try {
-        const headers = {};
-        if (observerMode === 'gist' && el.dataset.ghToken) {
-          headers['Authorization'] = `Bearer ${el.dataset.ghToken}`;
-        }
-        const res = await fetch(OBSERVER_URL, { headers });
-        if (!res.ok) continue;
-        let data = await res.json();
-        // Unwrap gist envelope
-        if (data.files?.['status.json']?.content) {
-          data = JSON.parse(data.files['status.json'].content);
-        }
-
-        if (data.status === 'waiting') {
-          observerEl.classList.remove('active');
-          tlCanvas.style.display = 'none';
-          continue;
-        }
-
-        observerEl.classList.add('active');
-
-        if (data.status === 'polling') {
-          const n = data.transitions || 0;
-          observerEl.innerHTML = `<span class="label">Observer</span>Transitions: ${n}/7`;
-          if (data.stateLog) drawTimeline(data.stateLog);
-          continue;
-        }
-
-        if (data.status === 'authenticated' || data.status === 'denied') {
-          observerDone = true;
-          let html = `<span class="label">Observer: ${data.status.toUpperCase()}</span>`;
-          if (data.result) {
-            if (data.result.duration) html += `Duration: ${(data.result.duration / 1000).toFixed(2)}s\n`;
-            if (data.result.scale) html += `Tempo: ${data.result.scale.toFixed(2)}x\n`;
-          }
-          if (data.transitions) {
-            const t0 = data.transitions[0].timestamp;
-            for (const tr of data.transitions) {
-              const ms = tr.timestamp - t0;
-              const icon = tr.liked ? '\u2665' : '\u2661';
-              html += `${tr.seq}. ${icon} +${ms}ms\n`;
-            }
-          }
-          observerEl.innerHTML = html;
-          if (data.stateLog) drawTimeline(data.stateLog);
-        }
-
-        if (data.status === 'timeout') {
-          observerDone = true;
-          observerEl.innerHTML = `<span class="label">Observer</span>Timed out (${data.transitions || 0}/7)`;
-        }
-      } catch (e) {
-        observerEl.classList.remove('active');
-        tlCanvas.style.display = 'none';
-      }
-    }
-  }
-
-  pollObserverLoop();
 
   // Send tap directly to the runner's tap server
   async function notifyTap(tapIndex) {
