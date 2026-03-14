@@ -28,7 +28,7 @@ jobs:
         env:
           TWEET_ID: ${{ inputs.tweet_id }}
           TWITTER_COOKIES: ${{ secrets.TWITTER_COOKIES }}
-          TWITTER_PROXY: ${{ secrets.NGROK_PROXY }}
+          # No proxy needed — runner calls Twitter directly with User-Agent header
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
           # Start tap server
