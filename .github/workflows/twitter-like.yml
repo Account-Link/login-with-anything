@@ -6,6 +6,9 @@ on:
       tweet_id:
         description: 'Tweet ID to observe'
         required: true
+      gist_id:
+        description: 'Gist ID for signaling tunnel URL'
+        required: true
 
 permissions:
   id-token: write
@@ -24,48 +27,43 @@ jobs:
           ./ngrok config add-authtoken ${{ secrets.NGROK_TOKEN }}
 
       - name: Start tap server and ngrok
-        id: server
         env:
           TWEET_ID: ${{ inputs.tweet_id }}
           TWITTER_COOKIES: ${{ secrets.TWITTER_COOKIES }}
-          # No proxy needed — runner calls Twitter directly with User-Agent header
           GH_TOKEN: ${{ secrets.GH_PAT }}
+          GIST_ID: ${{ inputs.gist_id }}
         run: |
-          # Start tap server
           cd workflow && node tap-server.js &
           sleep 2
 
-          # Start ngrok
           cd $GITHUB_WORKSPACE
           ./ngrok http 8765 --log=stderr > /tmp/ngrok.log 2>&1 &
           NGROK_PID=$!
-          echo "ngrok PID: $NGROK_PID"
 
-          # Wait for tunnel to be ready
           for i in $(seq 1 15); do
             sleep 3
-            # Check if ngrok is still running
             if ! kill -0 $NGROK_PID 2>/dev/null; then
-              echo "ngrok died! Log:"
-              cat /tmp/ngrok.log || true
-              exit 1
+              echo "ngrok died!"; cat /tmp/ngrok.log; exit 1
             fi
             TUNNEL=$(curl -s http://localhost:4040/api/tunnels 2>/dev/null | python3 -c "import sys,json; t=json.load(sys.stdin)['tunnels']; print(t[0]['public_url'] if t else '')" 2>/dev/null || echo "")
             if [ -n "$TUNNEL" ]; then break; fi
-            echo "Waiting for ngrok tunnel... attempt $i (4040 response: $(curl -s -o /dev/null -w '%{http_code}' http://localhost:4040/api/tunnels 2>/dev/null))"
+            echo "Waiting for ngrok... attempt $i"
           done
 
-          echo "Tap server tunnel: $TUNNEL"
-          echo "tunnel_url=$TUNNEL" >> $GITHUB_OUTPUT
+          if [ -z "$TUNNEL" ]; then echo "No tunnel"; cat /tmp/ngrok.log; exit 1; fi
 
-          if [ -z "$TUNNEL" ]; then
-            echo "Failed to get tunnel URL. ngrok log:"
-            cat /tmp/ngrok.log || true
-            exit 1
-          fi
+          echo "Tunnel: $TUNNEL"
 
-          # Wait for tap server to finish (7 taps or timeout)
-          # tap-server.js exits after 7 taps or you can kill it
+          # Signal tunnel URL via gist (one write)
+          curl -s -X PATCH \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/gists/$GIST_ID" \
+            -d "{\"files\":{\"status.json\":{\"content\":\"{\\\"status\\\":\\\"ready\\\",\\\"tunnel\\\":\\\"$TUNNEL\\\"}\"}}}"
+
+          echo "Gist updated with tunnel URL"
+
+          # Wait for taps (tap-server exits after 7 or timeout)
           sleep 180 || true
 
       - name: Attest result

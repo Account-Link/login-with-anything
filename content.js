@@ -459,67 +459,48 @@ function init(tweetId) {
       if (!ghToken) throw new Error('Paste a GitHub PAT first');
       el.dataset.ghToken = ghToken;
 
-      // Dispatch the workflow
+      // Create a gist for the runner to signal its tunnel URL
+      observerEl.innerHTML = '<span class="label">Observer</span>Creating signal gist...';
+      const gistRes = await fetch('https://api.github.com/gists', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${ghToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          description: 'login-with-anything signal',
+          public: false,
+          files: { 'status.json': { content: JSON.stringify({status: 'waiting'}) } },
+        }),
+      });
+      if (!gistRes.ok) throw new Error(`Gist creation failed: ${gistRes.status}`);
+      const gistId = (await gistRes.json()).id;
+
+      // Dispatch the workflow with gist_id
       observerEl.innerHTML = '<span class="label">Observer</span>Dispatching workflow...';
       const dispatchRes = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/twitter-like.yml/dispatches`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${ghToken}`, 'Accept': 'application/vnd.github.v3+json' },
-        body: JSON.stringify({ ref: 'main', inputs: { tweet_id: tweetId } }),
+        body: JSON.stringify({ ref: 'main', inputs: { tweet_id: tweetId, gist_id: gistId } }),
       });
       if (!dispatchRes.ok) throw new Error(`Dispatch failed: ${dispatchRes.status}`);
       btn.textContent = 'Dispatched';
       el.querySelector('#shave-config').style.display = 'none';
 
-      // Find the run ID by polling recent runs
-      observerEl.innerHTML = '<span class="label">Observer</span>Finding workflow run...';
-      let runId = null;
-      for (let i = 0; i < 15; i++) {
-        await new Promise(r => setTimeout(r, 3000));
-        const runsRes = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/twitter-like.yml/runs?per_page=1&status=in_progress`, {
-          headers: { 'Authorization': `Bearer ${ghToken}` },
-        });
-        if (!runsRes.ok) continue;
-        const runs = await runsRes.json();
-        if (runs.workflow_runs?.length) { runId = runs.workflow_runs[0].id; break; }
-        observerEl.innerHTML = `<span class="label">Observer</span>Waiting for run to start... ${(i+1)*3}s`;
-      }
-      if (!runId) throw new Error('Could not find workflow run');
-      observerEl.innerHTML = `<span class="label">Observer</span>Run ${runId} started. Waiting for tunnel...`;
-
-      // Poll the run's job logs for the ngrok tunnel URL
+      // Wait for runner to write tunnel URL to gist
       let tunnelUrl = null;
-      for (let i = 0; i < 30; i++) {
+      for (let i = 0; i < 40; i++) {
         await new Promise(r => setTimeout(r, 3000));
-        const elapsed = ((i + 1) * 3);
-        // Get jobs for this run
-        const jobsRes = await fetch(`https://api.github.com/repos/${repo}/actions/runs/${runId}/jobs`, {
+        const elapsed = (i + 1) * 3;
+        observerEl.innerHTML = `<span class="label">Observer</span>Waiting for runner... ${elapsed}s`;
+        const gRes = await fetch(`https://api.github.com/gists/${gistId}`, {
           headers: { 'Authorization': `Bearer ${ghToken}` },
         });
-        if (!jobsRes.ok) continue;
-        const jobs = await jobsRes.json();
-        const job = jobs.jobs?.[0];
-        if (!job) continue;
-
-        // Check step outputs
-        for (const step of job.steps || []) {
-          if (step.name?.includes('tap server') && step.conclusion === null) {
-            // Step is running — try to get logs
-            try {
-              const logsRes = await fetch(`https://api.github.com/repos/${repo}/actions/jobs/${job.id}/logs`, {
-                headers: { 'Authorization': `Bearer ${ghToken}` },
-              });
-              if (logsRes.ok) {
-                const logs = await logsRes.text();
-                const m = logs.match(/Tap server tunnel: (https:\/\/[^\s]+)/);
-                if (m) { tunnelUrl = m[1]; break; }
-              }
-            } catch (e) { /* logs not available yet */ }
-          }
-        }
-        if (tunnelUrl) break;
-        observerEl.innerHTML = `<span class="label">Observer</span>Waiting for tunnel... ${elapsed}s`;
+        if (!gRes.ok) continue;
+        const gData = await gRes.json();
+        const content = gData.files?.['status.json']?.content;
+        if (!content) continue;
+        const status = JSON.parse(content);
+        if (status.tunnel) { tunnelUrl = status.tunnel; break; }
       }
-      if (!tunnelUrl) throw new Error('Could not find tunnel URL in logs');
+      if (!tunnelUrl) throw new Error('Runner did not provide tunnel URL');
 
       tapServerUrl = tunnelUrl;
       btn.textContent = 'Connected';
