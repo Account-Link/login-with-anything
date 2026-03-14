@@ -7,14 +7,14 @@ if (location.hostname === 'x.com' && location.pathname.match(/\/status\/\d+/)) {
 }
 
 function init(tweetId) {
-  // "Shave and-a hair cut ... two bits"
-  //    1    2  +  3    4        6    7
-  // Quick pair is "and-a" between beats 2 and 3
-  const T = 700; // quarter note = 700ms (~85 BPM, relaxed tempo)
+  // "Shave and-a hair cut ... two bits (rest)"
+  //    1    2  +  3    4        6    7    8(rest)
+  const T = 700;
   const BEATS = [0, T, 1.5*T, 2*T, 3*T, 5*T, 6*T];
-  // Full cycle includes a rest before looping back to beat 1
-  const CYCLE_MS = 7 * T; // ~3.2 seconds per loop
-  const BEAT_FRACS = BEATS.map(b => b / CYCLE_MS);
+  const REST = 7 * T; // beat 8 = rest, completes the cycle
+  const CYCLE_MS = 8 * T;
+  const ALL_POSITIONS = [...BEATS, REST]; // 8 positions on the clock
+  const BEAT_FRACS = ALL_POSITIONS.map(b => b / CYCLE_MS);
 
   let taps = [];
   let listening = true;
@@ -106,27 +106,40 @@ function init(tweetId) {
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // Draw beat markers
+    // Draw beat markers (7 beats + 1 rest)
     BEAT_FRACS.forEach((bf, i) => {
       const [x, y] = fracToXY(bf, R);
+      const isRest = (i === 7);
       const isLarge = (i === 0 || i === 6);
-      const size = isLarge ? 8 : (i === 2 ? 5 : 6); // beat 2 ("and-a") is small
+      const size = isRest ? 4 : (isLarge ? 8 : (i === 2 ? 5 : 6));
 
-      // Color based on tap state
-      let color = '#444';
-      if (i < taps.length) color = '#22c55e'; // hit
+      let color;
+      if (isRest) {
+        color = '#282828'; // dim rest marker
+      } else if (i < taps.length) {
+        color = '#22c55e';
+      } else {
+        color = '#444';
+      }
+
       ctx.beginPath();
       ctx.arc(x, y, size, 0, Math.PI * 2);
-      ctx.fillStyle = color;
-      ctx.fill();
+      if (isRest) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = color;
+        ctx.fill();
+      }
 
-      // Beat number
-      ctx.fillStyle = '#888';
+      // Label
+      ctx.fillStyle = isRest ? '#333' : '#888';
       ctx.font = '9px system-ui';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       const [lx, ly] = fracToXY(bf, R - 18);
-      ctx.fillText(i + 1, lx, ly);
+      ctx.fillText(isRest ? '·' : String(i + 1), lx, ly);
     });
 
     // Sweeping dot
@@ -141,18 +154,18 @@ function init(tweetId) {
     ctx.fillStyle = 'rgba(29,155,240,0.15)';
     ctx.fill();
 
-    // Tick sound when sweeper crosses a beat marker
+    // Tick sound when sweeper crosses a beat marker (skip rest)
     for (let i = 0; i < BEAT_FRACS.length; i++) {
+      if (i === 7) continue; // rest — no tick
       const bf = BEAT_FRACS[i];
       const dist = Math.abs(frac - bf);
       const wrapped = Math.min(dist, 1 - dist);
-      if (wrapped < 0.015 && lastClickedBeat !== i) {
+      if (wrapped < 0.012 && lastClickedBeat !== i) {
         lastClickedBeat = i;
         playClick(i === 6 ? 1000 : 700);
       }
     }
-    // Reset lastClickedBeat between beats
-    const nearAny = BEAT_FRACS.some(bf => { const d = Math.abs(frac - bf); return Math.min(d, 1 - d) < 0.03; });
+    const nearAny = BEAT_FRACS.some(bf => { const d = Math.abs(frac - bf); return Math.min(d, 1 - d) < 0.025; });
     if (!nearAny) lastClickedBeat = -1;
 
     // Center text
