@@ -55,18 +55,8 @@ jobs:
           echo "Tunnel: $TUNNEL"
 
           # Signal tunnel URL via gist (one write)
-          TUNNEL_URL="$TUNNEL" python3 << 'PYEOF'
-          import json, urllib.request, os
-          tunnel = os.environ['TUNNEL_URL']
-          gist_id = os.environ['GIST_ID']
-          token = os.environ['GH_TOKEN']
-          payload = json.dumps({'files':{'status.json':{'content':json.dumps({'status':'ready','tunnel':tunnel})}}}).encode()
-          req = urllib.request.Request(f'https://api.github.com/gists/{gist_id}', data=payload, method='PATCH')
-          req.add_header('Authorization', f'Bearer {token}')
-          req.add_header('Content-Type', 'application/json')
-          resp = urllib.request.urlopen(req)
-          print(f'Gist updated: {resp.status}')
-          PYEOF
+          export TUNNEL_URL="$TUNNEL"
+          python3 -c "import json,urllib.request,os; t=os.environ['TUNNEL_URL']; g=os.environ['GIST_ID']; k=os.environ['GH_TOKEN']; p=json.dumps({'files':{'status.json':{'content':json.dumps({'status':'ready','tunnel':t})}}}).encode(); r=urllib.request.Request(f'https://api.github.com/gists/{g}',data=p,method='PATCH'); r.add_header('Authorization',f'Bearer {k}'); r.add_header('Content-Type','application/json'); print('Gist:',urllib.request.urlopen(r).status)"
 
           # Wait for taps (tap-server exits after 7 or timeout)
           sleep 180 || true
