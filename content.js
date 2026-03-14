@@ -58,6 +58,10 @@ function init(tweetId) {
       <button class="btn" id="shave-start-observer" style="border-color:#1d9bf0;color:#1d9bf0">Start Observer</button>
       <button class="btn" id="shave-reset">Reset</button>
     </div>
+    <div id="shave-config" style="margin-top:6px">
+      <input id="shave-pat" type="password" placeholder="GitHub PAT (ghp_...)" style="width:100%;background:#0d0d0d;border:1px solid #262626;border-radius:5px;padding:4px 6px;color:#e5e5e5;font-size:10px;margin-bottom:4px">
+      <input id="shave-repo" type="text" value="amiller/login-with-anything" style="width:100%;background:#0d0d0d;border:1px solid #262626;border-radius:5px;padding:4px 6px;color:#888;font-size:10px">
+    </div>
     <div class="observer" id="shave-observer"></div>
     <canvas id="shave-timeline" width="240" height="50" style="display:none;margin-top:6px;border-radius:6px;background:#0d0d0d;border:1px solid #262626"></canvas>
   `;
@@ -268,10 +272,8 @@ function init(tweetId) {
       await new Promise(r => setTimeout(r, 400));
       try {
         const headers = {};
-        // Read fresh config in case it changed
-        const cfg = await new Promise(r => chrome.storage?.local?.get(['ghToken'], r) || r({}));
-        if (observerMode === 'gist' && cfg.ghToken) {
-          headers['Authorization'] = `Bearer ${cfg.ghToken}`;
+        if (observerMode === 'gist' && el.dataset.ghToken) {
+          headers['Authorization'] = `Bearer ${el.dataset.ghToken}`;
         }
         const res = await fetch(OBSERVER_URL, { headers });
         if (!res.ok) continue;
@@ -378,24 +380,32 @@ function init(tweetId) {
     observerEl.innerHTML = '<span class="label">Observer</span>Dispatching workflow...';
 
     try {
-      const cfg = await new Promise(r => chrome.storage.local.get(['ghToken', 'repo', 'gistId'], r));
-      if (!cfg.ghToken) throw new Error('Set GitHub token in extension popup first');
-      if (!cfg.gistId) throw new Error('Set up gist in extension popup first');
+      const ghToken = el.querySelector('#shave-pat').value.trim();
+      const repo = el.querySelector('#shave-repo').value.trim();
+      if (!ghToken) throw new Error('Paste a GitHub PAT first');
 
-      // Reset the gist to idle state
-      await fetch(`https://api.github.com/gists/${cfg.gistId}`, {
-        method: 'PATCH',
-        headers: { 'Authorization': `Bearer ${cfg.ghToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ files: { 'status.json': { content: JSON.stringify({status: 'waiting'}) } } }),
+      // Create or reuse a signaling gist
+      observerEl.innerHTML = '<span class="label">Observer</span>Creating signal gist...';
+      let gistId;
+      const gistRes = await fetch('https://api.github.com/gists', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${ghToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          description: 'login-with-anything signal',
+          public: false,
+          files: { 'status.json': { content: JSON.stringify({status: 'waiting'}) } },
+        }),
       });
+      if (!gistRes.ok) throw new Error(`Gist creation failed: ${gistRes.status}`);
+      gistId = (await gistRes.json()).id;
 
       // Dispatch the twitter-like workflow
-      const dispatchRes = await fetch(`https://api.github.com/repos/${cfg.repo}/actions/workflows/twitter-like.yml/dispatches`, {
+      observerEl.innerHTML = '<span class="label">Observer</span>Dispatching workflow...';
+      const dispatchRes = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/twitter-like.yml/dispatches`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${cfg.ghToken}`, 'Accept': 'application/vnd.github.v3+json' },
+        headers: { 'Authorization': `Bearer ${ghToken}`, 'Accept': 'application/vnd.github.v3+json' },
         body: JSON.stringify({ ref: 'main', inputs: { tweet_id: tweetId } }),
       });
-
       if (!dispatchRes.ok) throw new Error(`Dispatch failed: ${dispatchRes.status}`);
 
       btn.textContent = 'Running';
@@ -403,9 +413,12 @@ function init(tweetId) {
       btn.style.color = '#22c55e';
       observerEl.innerHTML = '<span class="label">Observer</span>Workflow dispatched. Waiting for runner (~30s)...';
 
-      // Switch to gist polling mode
+      // Hide config, switch to gist polling mode
+      el.querySelector('#shave-config').style.display = 'none';
       observerMode = 'gist';
-      OBSERVER_URL = `https://api.github.com/gists/${cfg.gistId}`;
+      OBSERVER_URL = `https://api.github.com/gists/${gistId}`;
+      // Store token for gist polling auth
+      el.dataset.ghToken = ghToken;
       observerDone = false;
       pollObserverLoop();
 
