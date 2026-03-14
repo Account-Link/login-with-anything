@@ -17,7 +17,7 @@ function init(tweetId) {
   const BEAT_FRACS = ALL_POSITIONS.map(b => b / CYCLE_MS);
 
   let taps = [];
-  let listening = true;
+  let listening = false; // only start after runner connects
   let cycleStart = Date.now();
   let animFrame = null;
 
@@ -50,7 +50,7 @@ function init(tweetId) {
       <span class="title">Shave and a Haircut</span>
       <button class="close" id="shave-close">&times;</button>
     </div>
-    <canvas id="shave-canvas" width="180" height="180"></canvas>
+    <canvas id="shave-canvas" width="180" height="180" style="display:none"></canvas>
     <div class="status" id="shave-status">Click the like button when the dot hits a marker</div>
     <div class="result" id="shave-result"></div>
     <div class="hint">doot doo-da-loot doot &hellip; doot doot!</div>
@@ -369,21 +369,20 @@ function init(tweetId) {
 
   pollObserverLoop();
 
-  // Notify the runner about a new tap via gist
-  async function notifyTap() {
-    const token = el.dataset.ghToken;
-    const gist = el.dataset.gistId;
-    if (!token || !gist) return;
-    const tapData = taps.map((ts, i) => ({ n: i + 1, ts }));
+  // Send tap directly to the runner's tap server
+  async function notifyTap(tapIndex) {
+    if (!tapServerUrl) return null;
     try {
-      await fetch(`https://api.github.com/gists/${gist}`, {
-        method: 'PATCH',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ files: { 'status.json': { content: JSON.stringify({
-          status: 'polling', taps: tapData, tap_count: tapData.length,
-        }) } } }),
+      const res = await fetch(`${tapServerUrl}/tap`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
+        body: JSON.stringify({ tap: tapIndex + 1, client_ts: Date.now() }),
       });
-    } catch (e) { console.error('Tap notify failed:', e); }
+      return await res.json();
+    } catch (e) {
+      console.error('Tap notify failed:', e);
+      return { error: e.message };
+    }
   }
 
   function onLikeClick(e) {
@@ -395,8 +394,23 @@ function init(tweetId) {
     const wasLiked = btn.getAttribute('data-testid') === 'unlike';
     statusEl.textContent = `${i}/7: ${wasLiked ? 'unliked' : 'liked'}`;
 
-    // Notify runner via gist (fire and forget)
-    notifyTap();
+    // Send tap to runner and show server response
+    notifyTap(taps.length - 1).then(resp => {
+      if (!resp) return;
+      if (resp.error) {
+        observerEl.innerHTML = `<span class="label">Observer</span>Tap ${resp.tap || i}: ${resp.error}`;
+        return;
+      }
+      let obs = `<span class="label">Observer</span>`;
+      obs += `Tap ${resp.tap}/7: ${resp.liked ? 'liked' : 'unliked'} ${resp.changed ? '(changed)' : '(same)'}`;
+      if (resp.result) {
+        obs += `\n\nResult: ${resp.status?.toUpperCase()}`;
+        if (resp.result.valid) obs += `\nDuration: ${(resp.result.duration/1000).toFixed(2)}s Tempo: ${resp.result.scale.toFixed(2)}x`;
+        else obs += `\nReason: ${resp.result.reason}`;
+      }
+      observerEl.classList.add('active');
+      observerEl.innerHTML = obs;
+    });
 
     if (taps.length === 7) {
       const v = validateRhythm(taps);
@@ -410,7 +424,6 @@ function init(tweetId) {
         resultEl.style.color = '#ef4444';
         statusEl.textContent = v.reason;
       }
-      // One final draw to show completed state
       draw();
     }
   }
@@ -431,95 +444,97 @@ function init(tweetId) {
   observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-testid'] });
   hookLikeButton();
 
+  // Store the runner's tap server URL once connected
+  let tapServerUrl = null;
+
   el.querySelector('#shave-start-observer').addEventListener('click', async () => {
     const btn = el.querySelector('#shave-start-observer');
     btn.disabled = true;
     btn.textContent = 'Starting...';
     observerEl.classList.add('active');
-    observerEl.innerHTML = '<span class="label">Observer</span>Dispatching workflow...';
 
     try {
       const ghToken = el.querySelector('#shave-pat').value.trim();
       const repo = el.querySelector('#shave-repo').value.trim();
       if (!ghToken) throw new Error('Paste a GitHub PAT first');
+      el.dataset.ghToken = ghToken;
 
-      // Create or reuse a signaling gist
-      observerEl.innerHTML = '<span class="label">Observer</span>Creating signal gist...';
-      let gistId;
-      const gistRes = await fetch('https://api.github.com/gists', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${ghToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          description: 'login-with-anything signal',
-          public: false,
-          files: { 'status.json': { content: JSON.stringify({status: 'waiting'}) } },
-        }),
-      });
-      if (!gistRes.ok) throw new Error(`Gist creation failed: ${gistRes.status}`);
-      gistId = (await gistRes.json()).id;
-
-      // Dispatch the twitter-like workflow
+      // Dispatch the workflow
       observerEl.innerHTML = '<span class="label">Observer</span>Dispatching workflow...';
-      const proxyUrl = (el.querySelector('#shave-proxy')?.value || '').trim();
-      const inputs = { tweet_id: tweetId, gist_id: gistId };
-      if (proxyUrl) inputs.proxy_url = proxyUrl;
       const dispatchRes = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/twitter-like.yml/dispatches`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${ghToken}`, 'Accept': 'application/vnd.github.v3+json' },
-        body: JSON.stringify({ ref: 'main', inputs }),
+        body: JSON.stringify({ ref: 'main', inputs: { tweet_id: tweetId } }),
       });
       if (!dispatchRes.ok) throw new Error(`Dispatch failed: ${dispatchRes.status}`);
-
       btn.textContent = 'Dispatched';
       el.querySelector('#shave-config').style.display = 'none';
-      observerMode = 'gist';
-      OBSERVER_URL = `https://api.github.com/gists/${gistId}`;
-      el.dataset.ghToken = ghToken;
-      el.dataset.gistId = gistId;
 
-      // Wait for runner to boot — poll gist until status changes from "waiting"
-      observerEl.innerHTML = '<span class="label">Observer</span>Workflow dispatched. Waiting for runner...';
-      const bootStart = Date.now();
-      let booted = false;
-      for (let i = 0; i < 90; i++) { // up to ~3 minutes
-        await new Promise(r => setTimeout(r, 2000));
-        const elapsed = ((Date.now() - bootStart) / 1000).toFixed(0);
-        try {
-          const gistRes = await fetch(OBSERVER_URL, {
-            headers: { 'Authorization': `Bearer ${ghToken}` },
-          });
-          if (!gistRes.ok) continue;
-          const gistData = await gistRes.json();
-          const content = gistData.files?.['status.json']?.content;
-          if (!content) continue;
-          const status = JSON.parse(content);
+      // Find the run ID by polling recent runs
+      observerEl.innerHTML = '<span class="label">Observer</span>Finding workflow run...';
+      let runId = null;
+      for (let i = 0; i < 15; i++) {
+        await new Promise(r => setTimeout(r, 3000));
+        const runsRes = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/twitter-like.yml/runs?per_page=1&status=in_progress`, {
+          headers: { 'Authorization': `Bearer ${ghToken}` },
+        });
+        if (!runsRes.ok) continue;
+        const runs = await runsRes.json();
+        if (runs.workflow_runs?.length) { runId = runs.workflow_runs[0].id; break; }
+        observerEl.innerHTML = `<span class="label">Observer</span>Waiting for run to start... ${(i+1)*3}s`;
+      }
+      if (!runId) throw new Error('Could not find workflow run');
+      observerEl.innerHTML = `<span class="label">Observer</span>Run ${runId} started. Waiting for tunnel...`;
 
-          if (status.status === 'polling') {
-            booted = true;
-            btn.textContent = 'Connected';
-            btn.style.borderColor = '#22c55e';
-            btn.style.color = '#22c55e';
-            observerEl.innerHTML = `<span class="label">Observer</span>Runner connected after ${elapsed}s! Watching tweet...\nClick the like button in rhythm now.`;
-            break;
+      // Poll the run's job logs for the ngrok tunnel URL
+      let tunnelUrl = null;
+      for (let i = 0; i < 30; i++) {
+        await new Promise(r => setTimeout(r, 3000));
+        const elapsed = ((i + 1) * 3);
+        // Get jobs for this run
+        const jobsRes = await fetch(`https://api.github.com/repos/${repo}/actions/runs/${runId}/jobs`, {
+          headers: { 'Authorization': `Bearer ${ghToken}` },
+        });
+        if (!jobsRes.ok) continue;
+        const jobs = await jobsRes.json();
+        const job = jobs.jobs?.[0];
+        if (!job) continue;
+
+        // Check step outputs
+        for (const step of job.steps || []) {
+          if (step.name?.includes('tap server') && step.conclusion === null) {
+            // Step is running — try to get logs
+            try {
+              const logsRes = await fetch(`https://api.github.com/repos/${repo}/actions/jobs/${job.id}/logs`, {
+                headers: { 'Authorization': `Bearer ${ghToken}` },
+              });
+              if (logsRes.ok) {
+                const logs = await logsRes.text();
+                const m = logs.match(/Tap server tunnel: (https:\/\/[^\s]+)/);
+                if (m) { tunnelUrl = m[1]; break; }
+              }
+            } catch (e) { /* logs not available yet */ }
           }
-          observerEl.innerHTML = `<span class="label">Observer</span>Waiting for runner... ${elapsed}s`;
-        } catch (e) {
-          observerEl.innerHTML = `<span class="label">Observer</span>Waiting for runner... ${elapsed}s`;
         }
+        if (tunnelUrl) break;
+        observerEl.innerHTML = `<span class="label">Observer</span>Waiting for tunnel... ${elapsed}s`;
       }
+      if (!tunnelUrl) throw new Error('Could not find tunnel URL in logs');
 
-      if (!booted) {
-        observerEl.innerHTML = '<span class="label">Observer</span>Runner did not start. Check workflow logs.';
-        btn.textContent = 'Start Observer';
-        btn.style.borderColor = '#1d9bf0';
-        btn.style.color = '#1d9bf0';
-        btn.disabled = false;
-        return;
-      }
+      tapServerUrl = tunnelUrl;
+      btn.textContent = 'Connected';
+      btn.style.borderColor = '#22c55e';
+      btn.style.color = '#22c55e';
 
-      // Now start the live polling loop
-      observerDone = false;
-      pollObserverLoop();
+      // Show the clock and enable tapping
+      el.querySelector('#shave-canvas').style.display = '';
+      listening = true;
+      cycleStart = Date.now();
+      if (animFrame) cancelAnimationFrame(animFrame);
+      animFrame = null;
+      draw();
+
+      observerEl.innerHTML = `<span class="label">Observer</span>Connected to runner!\nTunnel: ${tunnelUrl}\nClick the like button in rhythm now.`;
 
     } catch (e) {
       btn.disabled = false;

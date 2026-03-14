@@ -6,12 +6,6 @@ on:
       tweet_id:
         description: 'Tweet ID to observe'
         required: true
-      gist_id:
-        description: 'Gist ID for status signaling'
-        required: true
-      proxy_url:
-        description: 'API proxy URL (optional override)'
-        required: false
 
 permissions:
   id-token: write
@@ -24,18 +18,35 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Observe like state
+      - name: Install ngrok
+        run: |
+          curl -s https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz | tar xz
+          ./ngrok config add-authtoken ${{ secrets.NGROK_TOKEN }}
+
+      - name: Start tap server and ngrok
+        id: server
         env:
           TWEET_ID: ${{ inputs.tweet_id }}
           TWITTER_COOKIES: ${{ secrets.TWITTER_COOKIES }}
-          TWITTER_PROXY: ${{ inputs.proxy_url || secrets.NGROK_PROXY }}
-          GIST_ID: ${{ inputs.gist_id }}
+          TWITTER_PROXY: ${{ secrets.NGROK_PROXY }}
           GH_TOKEN: ${{ secrets.GH_PAT }}
-          TIMEOUT: '120000'
         run: |
-          mkdir -p workflow/output
-          cd workflow
-          node adapters/twitter-like.js
+          # Start tap server
+          cd workflow && node tap-server.js &
+          sleep 2
+
+          # Start ngrok
+          cd $GITHUB_WORKSPACE
+          ./ngrok http 8765 --log=stdout > /tmp/ngrok.log 2>&1 &
+          sleep 3
+
+          # Get tunnel URL
+          TUNNEL=$(curl -s http://localhost:4040/api/tunnels | python3 -c "import sys,json; t=json.load(sys.stdin)['tunnels']; print(t[0]['public_url'] if t else '')")
+          echo "Tap server tunnel: $TUNNEL"
+          echo "tunnel_url=$TUNNEL" >> $GITHUB_OUTPUT
+
+          # Wait for tap server to finish (7 taps or timeout)
+          wait -n || true
 
       - name: Attest result
         if: always()

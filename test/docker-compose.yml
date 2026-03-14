@@ -22,3 +22,7 @@ services:
       NEKO_MEMBER_PROVIDER: noauth
     volumes:
       - ../:/usr/share/chromium/extensions/shave-src:ro
+      - chrome-profile:/home/neko/.config/chromium
+
+volumes:
+  chrome-profile:
