@@ -11,8 +11,8 @@ const BASE_URL = process.env.TWITTER_PROXY || 'https://x.com';
 const tweetId = process.env.TWEET_ID;
 const cookies = JSON.parse(process.env.TWITTER_COOKIES);
 
-const T_REF = 1400;
-const PATTERN = [0, T_REF, 1.5*T_REF, 2*T_REF, 3*T_REF, 5*T_REF, 6*T_REF];
+const REQUIRED_TRANSITIONS = 3;
+const TIME_WINDOW = 15000; // 15 seconds
 
 if (!tweetId) { console.error('TWEET_ID required'); process.exit(1); }
 
@@ -42,16 +42,12 @@ async function checkLiked() {
   throw new Error('Could not find favorited field');
 }
 
-function validateRhythm(timestamps) {
-  if (timestamps.length !== 7) return { valid: false, reason: `Need 7, got ${timestamps.length}` };
-  const t = timestamps.map(ts => ts - timestamps[0]);
-  const scale = t[6] / PATTERN[6];
-  if (scale < 0.3 || scale > 5) return { valid: false, reason: 'Tempo way off' };
-  const tolerance = 300 * scale;
-  for (let i = 1; i < 7; i++) {
-    if (Math.abs(t[i] - PATTERN[i] * scale) > tolerance) return { valid: false, reason: `Off at beat ${i + 1}` };
-  }
-  return { valid: true, scale, duration: t[6] };
+function validateTransitions(verified) {
+  const changes = verified.filter(v => v.changed);
+  if (changes.length < REQUIRED_TRANSITIONS) return { valid: false, reason: `Need ${REQUIRED_TRANSITIONS} state changes, got ${changes.length}` };
+  const duration = verified[verified.length - 1].server_ts - verified[0].server_ts;
+  if (duration > TIME_WINDOW) return { valid: false, reason: `Took ${(duration/1000).toFixed(1)}s, need under ${TIME_WINDOW/1000}s` };
+  return { valid: true, changes: changes.length, duration };
 }
 
 const verified = [];
@@ -66,7 +62,7 @@ const server = createServer(async (req, res) => {
 
   if (req.method === 'POST' && req.url === '/tap') {
     const i = verified.length;
-    if (i >= 7) { res.writeHead(200); res.end(JSON.stringify({ error: 'already done' })); return; }
+    if (verified.filter(v => v.changed).length >= REQUIRED_TRANSITIONS) { res.writeHead(200); res.end(JSON.stringify({ error: 'already done' })); return; }
 
     const serverTs = Date.now();
     let liked;
@@ -83,8 +79,9 @@ const server = createServer(async (req, res) => {
 
     const response = { tap: i + 1, liked, changed, total: verified.length };
 
-    if (verified.length === 7) {
-      const result = validateRhythm(verified.map(v => v.server_ts));
+    const changes = verified.filter(v => v.changed).length;
+    if (changes >= REQUIRED_TRANSITIONS) {
+      const result = validateTransitions(verified);
       response.result = result;
       response.status = result.valid ? 'authenticated' : 'denied';
 
