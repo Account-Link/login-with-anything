@@ -352,6 +352,23 @@ function init(tweetId) {
 
   pollObserverLoop();
 
+  // Notify the runner about a new tap via gist
+  async function notifyTap() {
+    const token = el.dataset.ghToken;
+    const gist = el.dataset.gistId;
+    if (!token || !gist) return;
+    const tapData = taps.map((ts, i) => ({ n: i + 1, ts }));
+    try {
+      await fetch(`https://api.github.com/gists/${gist}`, {
+        method: 'PATCH',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files: { 'status.json': { content: JSON.stringify({
+          status: 'polling', taps: tapData, tap_count: tapData.length,
+        }) } } }),
+      });
+    } catch (e) { console.error('Tap notify failed:', e); }
+  }
+
   function onLikeClick(e) {
     if (!listening || taps.length >= 7) return;
 
@@ -360,6 +377,9 @@ function init(tweetId) {
     const btn = e.currentTarget;
     const wasLiked = btn.getAttribute('data-testid') === 'unlike';
     statusEl.textContent = `${i}/7: ${wasLiked ? 'unliked' : 'liked'}`;
+
+    // Notify runner via gist (fire and forget)
+    notifyTap();
 
     if (taps.length === 7) {
       const v = validateRhythm(taps);
@@ -438,6 +458,7 @@ function init(tweetId) {
       observerMode = 'gist';
       OBSERVER_URL = `https://api.github.com/gists/${gistId}`;
       el.dataset.ghToken = ghToken;
+      el.dataset.gistId = gistId;
 
       // Wait for runner to boot — poll gist until status changes from "waiting"
       observerEl.innerHTML = '<span class="label">Observer</span>Workflow dispatched. Waiting for runner...';
