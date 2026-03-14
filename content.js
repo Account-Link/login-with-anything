@@ -60,7 +60,8 @@ function init(tweetId) {
     </div>
     <div id="shave-config" style="margin-top:6px">
       <input id="shave-pat" type="password" placeholder="GitHub PAT (ghp_...)" style="width:100%;background:#0d0d0d;border:1px solid #262626;border-radius:5px;padding:4px 6px;color:#e5e5e5;font-size:10px;margin-bottom:4px">
-      <input id="shave-repo" type="text" value="amiller/login-with-anything" style="width:100%;background:#0d0d0d;border:1px solid #262626;border-radius:5px;padding:4px 6px;color:#888;font-size:10px">
+      <input id="shave-repo" type="text" value="amiller/login-with-anything" style="width:100%;background:#0d0d0d;border:1px solid #262626;border-radius:5px;padding:4px 6px;color:#888;font-size:10px;margin-bottom:4px">
+      <input id="shave-proxy" type="text" placeholder="Proxy URL (ngrok, optional)" style="width:100%;background:#0d0d0d;border:1px solid #262626;border-radius:5px;padding:4px 6px;color:#888;font-size:10px">
     </div>
     <div class="observer" id="shave-observer"></div>
     <canvas id="shave-timeline" width="240" height="50" style="display:none;margin-top:6px;border-radius:6px;background:#0d0d0d;border:1px solid #262626"></canvas>
@@ -422,10 +423,13 @@ function init(tweetId) {
 
       // Dispatch the twitter-like workflow
       observerEl.innerHTML = '<span class="label">Observer</span>Dispatching workflow...';
+      const proxyUrl = (el.querySelector('#shave-proxy')?.value || '').trim();
+      const inputs = { tweet_id: tweetId, gist_id: gistId };
+      if (proxyUrl) inputs.proxy_url = proxyUrl;
       const dispatchRes = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/twitter-like.yml/dispatches`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${ghToken}`, 'Accept': 'application/vnd.github.v3+json' },
-        body: JSON.stringify({ ref: 'main', inputs: { tweet_id: tweetId, gist_id: gistId } }),
+        body: JSON.stringify({ ref: 'main', inputs }),
       });
       if (!dispatchRes.ok) throw new Error(`Dispatch failed: ${dispatchRes.status}`);
 
