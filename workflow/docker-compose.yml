@@ -1,0 +1,10 @@
+services:
+  poller:
+    build: .
+    environment:
+      - TWEET_ID=${TWEET_ID}
+      - TWITTER_COOKIES=${TWITTER_COOKIES}
+      - GIST_ID=${GIST_ID:-}
+      - GH_TOKEN=${GH_TOKEN:-}
+    volumes:
+      - ./output:/app/output

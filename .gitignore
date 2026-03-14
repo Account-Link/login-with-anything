@@ -1,0 +1,6 @@
+cookies.json
+*.cookies
+.env
+test/output/
+workflow/output/
+DEPLOY.md

@@ -1,0 +1,38 @@
+name: Login with GitHub Star
+
+on:
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: 'Repo to check (owner/name)'
+        required: true
+        default: 'amiller/login-with-anything'
+
+permissions:
+  id-token: write
+  contents: read
+  attestations: write
+
+jobs:
+  observe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Observe star state
+        env:
+          REPO: ${{ inputs.repo }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GIST_ID: ${{ secrets.SIGNAL_GIST_ID }}
+          POLL_INTERVAL: '500'
+          TIMEOUT: '120000'
+        run: |
+          mkdir -p workflow/output
+          cd workflow
+          node adapters/github-star.js
+
+      - name: Attest result
+        if: always()
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: workflow/output/result.json

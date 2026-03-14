@@ -1,0 +1,39 @@
+name: Login with Gmail Absence
+
+on:
+  workflow_dispatch:
+    inputs:
+      sender_email:
+        description: 'Email address to check inbox for'
+        required: true
+        default: 'jeevacations@gmail.com'
+
+permissions:
+  id-token: write
+  contents: read
+  attestations: write
+
+jobs:
+  observe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check inbox
+        env:
+          SENDER_EMAIL: ${{ inputs.sender_email }}
+          GMAIL_TOKEN: ${{ secrets.GMAIL_TOKEN }}
+          GIST_ID: ${{ secrets.SIGNAL_GIST_ID }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          POLL_INTERVAL: '1000'
+          TIMEOUT: '30000'
+        run: |
+          mkdir -p workflow/output
+          cd workflow
+          node adapters/gmail-absence.js
+
+      - name: Attest result
+        if: always()
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: workflow/output/result.json

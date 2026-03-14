@@ -1,0 +1,39 @@
+# Place in .github/workflows/ of the target repo
+name: Shave and a Haircut
+
+on:
+  workflow_dispatch:
+    inputs:
+      tweet_id:
+        description: 'Tweet ID to monitor'
+        required: true
+      gist_id:
+        description: 'Gist ID for status signaling'
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+  attestations: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Poll tweet for rhythm
+        env:
+          TWEET_ID: ${{ inputs.tweet_id }}
+          TWITTER_COOKIES: ${{ secrets.TWITTER_COOKIES }}
+          GIST_ID: ${{ inputs.gist_id }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p output
+          node workflow/poll-tweet.js
+
+      - name: Attest result
+        if: success()
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: output/shave-result.json

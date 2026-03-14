@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Shave and a Haircut</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: system-ui; background: #0a0a0a; color: #e5e5e5; width: 400px; padding: 24px; }
+
+h1 { font-size: 18px; margin-bottom: 4px; }
+.sub { font-size: 12px; color: #888; margin-bottom: 20px; }
+
+label { font-size: 12px; color: #888; display: block; margin-bottom: 4px; }
+input, select { background: #1a1a1a; color: #e5e5e5; border: 1px solid #333; border-radius: 6px; padding: 6px 10px; font-size: 13px; width: 100%; }
+select { cursor: pointer; }
+
+.field { margin-bottom: 16px; }
+
+.beats { display: flex; justify-content: center; gap: 6px; margin: 20px 0 8px; align-items: end; }
+.beat { width: 28px; height: 28px; border-radius: 50%; border: 2px solid #333; transition: all 0.15s; }
+.beat.small { width: 22px; height: 22px; }
+.beat.big { width: 34px; height: 34px; }
+.beat.gap { width: 16px; border: none; }
+.beat.pending { background: #eab308; border-color: #eab308; }
+.beat.hit { background: #22c55e; border-color: #22c55e; }
+.beat.miss { background: #ef4444; border-color: #ef4444; }
+
+.labels { display: flex; justify-content: center; gap: 6px; margin-bottom: 16px; font-size: 10px; color: #555; }
+.labels span { width: 28px; text-align: center; }
+.labels .small { width: 22px; }
+.labels .big { width: 34px; }
+.labels .gap { width: 16px; }
+
+#tap-btn { display: block; margin: 0 auto; font-size: 28px; padding: 16px 56px; border-radius: 12px; border: 2px solid #2563eb; background: #1a1a1a; color: #e5e5e5; cursor: pointer; user-select: none; transition: all 0.1s; }
+#tap-btn:hover { background: #1d2d50; }
+#tap-btn:active { background: #2563eb; transform: scale(0.96); }
+#tap-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.controls { display: flex; justify-content: center; gap: 8px; margin-top: 12px; }
+.btn { padding: 5px 12px; border-radius: 6px; border: 1px solid #333; background: #1a1a1a; color: #e5e5e5; font-size: 12px; cursor: pointer; }
+.btn:hover { background: #262626; }
+
+#status { text-align: center; margin-top: 12px; font-size: 12px; color: #888; min-height: 18px; }
+#result { text-align: center; margin-top: 8px; font-size: 22px; font-weight: 700; min-height: 30px; }
+
+.runner-status { margin-top: 16px; padding: 10px; background: #161616; border: 1px solid #262626; border-radius: 8px; font-size: 11px; color: #888; display: none; }
+.runner-status .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+.runner-status .dot.waiting { background: #eab308; }
+.runner-status .dot.polling { background: #22c55e; }
+.runner-status .dot.done { background: #2563eb; }
+</style>
+</head>
+<body>
+  <h1>Log in with Shave and a Haircut</h1>
+  <p class="sub">Tap the rhythm. The runner watches.</p>
+
+  <div class="field">
+    <label>Tweet URL or ID</label>
+    <input id="tweet-input" type="text" placeholder="https://x.com/user/status/123... or just 123...">
+  </div>
+
+  <div class="field">
+    <label>Mode</label>
+    <select id="mode-select">
+      <option value="local">Local (extension only)</option>
+      <option value="github">GitHub Actions (attested)</option>
+    </select>
+  </div>
+
+  <div class="beats">
+    <div class="beat" data-i="0"></div>
+    <div class="beat" data-i="1"></div>
+    <div class="beat" data-i="2"></div>
+    <div class="beat small" data-i="3"></div>
+    <div class="beat" data-i="4"></div>
+    <div class="beat gap"></div>
+    <div class="beat" data-i="5"></div>
+    <div class="beat big" data-i="6"></div>
+  </div>
+  <div class="labels">
+    <span>&#9829;</span>
+    <span>&#9825;</span>
+    <span>&#9829;</span>
+    <span class="small">&#9825;</span>
+    <span>&#9829;</span>
+    <span class="gap"></span>
+    <span>&#9825;</span>
+    <span class="big">&#9829;</span>
+  </div>
+
+  <button id="tap-btn" disabled>TAP</button>
+
+  <div class="controls">
+    <button class="btn" id="reset-btn">Reset</button>
+    <button class="btn" id="open-tweet-btn">Open Tweet</button>
+  </div>
+
+  <div id="status">Enter a tweet to begin</div>
+  <div id="result"></div>
+
+  <div class="runner-status" id="runner-status">
+    <span class="dot waiting"></span>
+    <span id="runner-text">Waiting for runner...</span>
+  </div>
+
+  <script src="twitter.js"></script>
+  <script src="shave.js"></script>
+</body>
+</html>

@@ -1,0 +1,38 @@
+name: Login with Twitter Like
+
+on:
+  workflow_dispatch:
+    inputs:
+      tweet_id:
+        description: 'Tweet ID to observe'
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+  attestations: write
+
+jobs:
+  observe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Observe like state
+        env:
+          TWEET_ID: ${{ inputs.tweet_id }}
+          TWITTER_COOKIES: ${{ secrets.TWITTER_COOKIES }}
+          GIST_ID: ${{ secrets.SIGNAL_GIST_ID }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          POLL_INTERVAL: '500'
+          TIMEOUT: '120000'
+        run: |
+          mkdir -p workflow/output
+          cd workflow
+          node adapters/twitter-like.js
+
+      - name: Attest result
+        if: always()
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: workflow/output/result.json
