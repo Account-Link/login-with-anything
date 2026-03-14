@@ -4,6 +4,7 @@
 import { createObserver } from '../observer.js';
 
 const BEARER = process.env.TWITTER_BEARER || 'AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA';
+const QUERY_ID = process.env.TWITTER_QUERY_ID || '9rs110LSoPARDs61WOBZ7A';
 const tweetId = process.env.TWEET_ID;
 const cookies = JSON.parse(process.env.TWITTER_COOKIES);
 
@@ -12,19 +13,19 @@ if (!tweetId) { console.error('TWEET_ID required'); process.exit(1); }
 async function poll() {
   const cookieStr = Object.entries(cookies).map(([k, v]) => `${k}=${v}`).join('; ');
   const vars = JSON.stringify({
-    tweetId: tweetId,
+    focalTweetId: tweetId,
     withCommunity: false,
     includePromotedContent: false,
     withVoice: false,
     withBirdwatchNotes: false,
     withV2Timeline: true,
   });
-  const queryId = process.env.TWITTER_QUERY_ID || '-pZk1GFMnSjUsrsS2vyXNA';
-  const res = await fetch(`https://x.com/i/api/graphql/${queryId}/TweetResultByRestId?variables=${encodeURIComponent(vars)}`, {
+  const res = await fetch(`https://x.com/i/api/graphql/${QUERY_ID}/TweetDetail?variables=${encodeURIComponent(vars)}`, {
     headers: {
       'Authorization': `Bearer ${BEARER}`,
       'x-csrf-token': cookies.ct0,
       'Cookie': cookieStr,
+      'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
     },
   });
   if (res.status === 429) {
@@ -34,17 +35,13 @@ async function poll() {
   }
   if (!res.ok) throw new Error(`Twitter API ${res.status}`);
   const data = await res.json();
-  // TweetResultByRestId response shape
-  const legacy = data?.data?.tweetResult?.result?.legacy;
-  if (legacy && 'favorited' in legacy) return legacy.favorited;
-  // TweetDetail fallback
   for (const inst of data?.data?.threaded_conversation_with_injections_v2?.instructions || []) {
     for (const entry of inst.entries || []) {
-      const l = entry.content?.itemContent?.tweet_results?.result?.legacy;
-      if (l && 'favorited' in l) return l.favorited;
+      const legacy = entry.content?.itemContent?.tweet_results?.result?.legacy;
+      if (legacy && 'favorited' in legacy) return legacy.favorited;
     }
   }
-  throw new Error('Could not find favorited field: ' + JSON.stringify(data).slice(0, 200));
+  throw new Error('Could not find favorited field');
 }
 
 const obs = createObserver({
