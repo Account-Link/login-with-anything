@@ -54,9 +54,20 @@ jobs:
 
           echo "Tunnel: $TUNNEL"
 
-          # Signal tunnel URL via gist (one write)
-          export TUNNEL_URL="$TUNNEL"
-          python3 workflow/update-gist.py
+          # Signal tunnel URL via gist
+          cd workflow
+          TUNNEL_URL="$TUNNEL" node -e "
+            const {writeFileSync} = require('fs');
+            const tunnel = process.env.TUNNEL_URL;
+            const gistId = process.env.GIST_ID;
+            const token = process.env.GH_TOKEN;
+            fetch('https://api.github.com/gists/' + gistId, {
+              method: 'PATCH',
+              headers: {'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'},
+              body: JSON.stringify({files:{'status.json':{content: JSON.stringify({status:'ready',tunnel})}}})
+            }).then(r => {console.log('Gist update:', r.status); return r.text()}).then(t => {if(!t.includes('id')) console.log(t.slice(0,200))});
+          "
+          cd $GITHUB_WORKSPACE
 
           # Wait for taps (tap-server exits after 7 or timeout)
           sleep 180 || true
