@@ -56,7 +56,7 @@ jobs:
 
           # Signal tunnel URL via gist (one write)
           export TUNNEL_URL="$TUNNEL"
-          python3 -c "import json,urllib.request,os; t=os.environ['TUNNEL_URL']; g=os.environ['GIST_ID']; k=os.environ['GH_TOKEN']; p=json.dumps({'files':{'status.json':{'content':json.dumps({'status':'ready','tunnel':t})}}}).encode(); r=urllib.request.Request(f'https://api.github.com/gists/{g}',data=p,method='PATCH'); r.add_header('Authorization',f'Bearer {k}'); r.add_header('Content-Type','application/json'); print('Gist:',urllib.request.urlopen(r).status)"
+          python3 workflow/update-gist.py
 
           # Wait for taps (tap-server exits after 7 or timeout)
           sleep 180 || true
