@@ -9,6 +9,9 @@ on:
       gist_id:
         description: 'Gist ID for status signaling'
         required: true
+      proxy_url:
+        description: 'ngrok proxy URL (optional, for residential IP routing)'
+        required: false
 
 permissions:
   id-token: write
@@ -25,6 +28,7 @@ jobs:
         env:
           TWEET_ID: ${{ inputs.tweet_id }}
           TWITTER_COOKIES: ${{ secrets.TWITTER_COOKIES }}
+          TWITTER_PROXY: ${{ inputs.proxy_url }}
           GIST_ID: ${{ inputs.gist_id }}
           GH_TOKEN: ${{ secrets.GH_PAT }}
           POLL_INTERVAL: '500'

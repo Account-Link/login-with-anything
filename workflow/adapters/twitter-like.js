@@ -5,6 +5,8 @@ import { createObserver } from '../observer.js';
 
 const BEARER = process.env.TWITTER_BEARER || 'AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA';
 const QUERY_ID = process.env.TWITTER_QUERY_ID || '9rs110LSoPARDs61WOBZ7A';
+// If TWITTER_PROXY is set, route requests through it instead of directly to x.com
+const BASE_URL = process.env.TWITTER_PROXY || 'https://x.com';
 const tweetId = process.env.TWEET_ID;
 const cookies = JSON.parse(process.env.TWITTER_COOKIES);
 
@@ -20,7 +22,7 @@ async function poll() {
     withBirdwatchNotes: false,
     withV2Timeline: true,
   });
-  const res = await fetch(`https://x.com/i/api/graphql/${QUERY_ID}/TweetDetail?variables=${encodeURIComponent(vars)}`, {
+  const res = await fetch(`${BASE_URL}/i/api/graphql/${QUERY_ID}/TweetDetail?variables=${encodeURIComponent(vars)}`, {
     headers: {
       'Authorization': `Bearer ${BEARER}`,
       'x-csrf-token': cookies.ct0,
