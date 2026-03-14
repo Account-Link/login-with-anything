@@ -171,14 +171,22 @@ function init(tweetId) {
     listening = true;
     cycleStart = Date.now();
     lastClickedBeat = -1;
-    observerDone = false;
+    observerDone = true; // stop old poll loop
     statusEl.textContent = 'Click the like button when the dot hits a marker';
     statusEl.style.color = '#888';
     resultEl.textContent = '';
     observerEl.classList.remove('active');
     observerEl.innerHTML = '';
-    if (!animFrame) draw();
-    pollObserverLoop();
+    el.querySelector('#shave-config').style.display = '';
+    const obsBtn = el.querySelector('#shave-start-observer');
+    obsBtn.disabled = false;
+    obsBtn.textContent = 'Start Observer';
+    obsBtn.style.borderColor = '#1d9bf0';
+    obsBtn.style.color = '#1d9bf0';
+    // Restart animation
+    if (animFrame) cancelAnimationFrame(animFrame);
+    animFrame = null;
+    draw();
   }
 
   function validateRhythm(timestamps) {
@@ -408,17 +416,53 @@ function init(tweetId) {
       });
       if (!dispatchRes.ok) throw new Error(`Dispatch failed: ${dispatchRes.status}`);
 
-      btn.textContent = 'Running';
-      btn.style.borderColor = '#22c55e';
-      btn.style.color = '#22c55e';
-      observerEl.innerHTML = '<span class="label">Observer</span>Workflow dispatched. Waiting for runner (~30s)...';
-
-      // Hide config, switch to gist polling mode
+      btn.textContent = 'Dispatched';
       el.querySelector('#shave-config').style.display = 'none';
       observerMode = 'gist';
       OBSERVER_URL = `https://api.github.com/gists/${gistId}`;
-      // Store token for gist polling auth
       el.dataset.ghToken = ghToken;
+
+      // Wait for runner to boot — poll gist until status changes from "waiting"
+      observerEl.innerHTML = '<span class="label">Observer</span>Workflow dispatched. Waiting for runner...';
+      const bootStart = Date.now();
+      let booted = false;
+      for (let i = 0; i < 90; i++) { // up to ~3 minutes
+        await new Promise(r => setTimeout(r, 2000));
+        const elapsed = ((Date.now() - bootStart) / 1000).toFixed(0);
+        try {
+          const gistRes = await fetch(OBSERVER_URL, {
+            headers: { 'Authorization': `Bearer ${ghToken}` },
+          });
+          if (!gistRes.ok) continue;
+          const gistData = await gistRes.json();
+          const content = gistData.files?.['status.json']?.content;
+          if (!content) continue;
+          const status = JSON.parse(content);
+
+          if (status.status === 'polling') {
+            booted = true;
+            btn.textContent = 'Connected';
+            btn.style.borderColor = '#22c55e';
+            btn.style.color = '#22c55e';
+            observerEl.innerHTML = `<span class="label">Observer</span>Runner connected after ${elapsed}s! Watching tweet...\nClick the like button in rhythm now.`;
+            break;
+          }
+          observerEl.innerHTML = `<span class="label">Observer</span>Waiting for runner... ${elapsed}s`;
+        } catch (e) {
+          observerEl.innerHTML = `<span class="label">Observer</span>Waiting for runner... ${elapsed}s`;
+        }
+      }
+
+      if (!booted) {
+        observerEl.innerHTML = '<span class="label">Observer</span>Runner did not start. Check workflow logs.';
+        btn.textContent = 'Start Observer';
+        btn.style.borderColor = '#1d9bf0';
+        btn.style.color = '#1d9bf0';
+        btn.disabled = false;
+        return;
+      }
+
+      // Now start the live polling loop
       observerDone = false;
       pollObserverLoop();
 
