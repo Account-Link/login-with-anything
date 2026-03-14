@@ -37,20 +37,32 @@ jobs:
 
           # Start ngrok
           cd $GITHUB_WORKSPACE
-          ./ngrok http 8765 --log=stdout > /tmp/ngrok.log 2>&1 &
+          ./ngrok http 8765 --log=stderr > /tmp/ngrok.log 2>&1 &
+          NGROK_PID=$!
+          echo "ngrok PID: $NGROK_PID"
 
           # Wait for tunnel to be ready
-          for i in $(seq 1 10); do
-            sleep 2
+          for i in $(seq 1 15); do
+            sleep 3
+            # Check if ngrok is still running
+            if ! kill -0 $NGROK_PID 2>/dev/null; then
+              echo "ngrok died! Log:"
+              cat /tmp/ngrok.log || true
+              exit 1
+            fi
             TUNNEL=$(curl -s http://localhost:4040/api/tunnels 2>/dev/null | python3 -c "import sys,json; t=json.load(sys.stdin)['tunnels']; print(t[0]['public_url'] if t else '')" 2>/dev/null || echo "")
             if [ -n "$TUNNEL" ]; then break; fi
-            echo "Waiting for ngrok tunnel... attempt $i"
+            echo "Waiting for ngrok tunnel... attempt $i (4040 response: $(curl -s -o /dev/null -w '%{http_code}' http://localhost:4040/api/tunnels 2>/dev/null))"
           done
 
           echo "Tap server tunnel: $TUNNEL"
           echo "tunnel_url=$TUNNEL" >> $GITHUB_OUTPUT
 
-          if [ -z "$TUNNEL" ]; then echo "Failed to get tunnel URL"; exit 1; fi
+          if [ -z "$TUNNEL" ]; then
+            echo "Failed to get tunnel URL. ngrok log:"
+            cat /tmp/ngrok.log || true
+            exit 1
+          fi
 
           # Wait for tap server to finish (7 taps or timeout)
           # tap-server.js exits after 7 taps or you can kill it
