@@ -191,7 +191,18 @@ function init(tweetId) {
   }
 
   // Poll the observer (poller container / GitHub Actions) for its report
-  const OBSERVER_URL = 'http://localhost:3456';
+  // Observer endpoint — local result server or GitHub gist
+  // Set via chrome.storage.local: {observerMode: 'local'|'gist', gistId: '...', ghToken: '...'}
+  let OBSERVER_URL = 'http://localhost:3456';
+  let observerMode = 'local';
+
+  chrome.storage?.local?.get(['observerMode', 'gistId', 'ghToken'], (cfg) => {
+    if (!cfg) return;
+    observerMode = cfg.observerMode || 'local';
+    if (observerMode === 'gist' && cfg.gistId) {
+      OBSERVER_URL = `https://api.github.com/gists/${cfg.gistId}`;
+    }
+  });
   const observerEl = el.querySelector('#shave-observer');
 
   // Continuously poll the observer and draw live time series
@@ -255,9 +266,19 @@ function init(tweetId) {
     while (!observerDone) {
       await new Promise(r => setTimeout(r, 400));
       try {
-        const res = await fetch(OBSERVER_URL);
+        const headers = {};
+        // Read fresh config in case it changed
+        const cfg = await new Promise(r => chrome.storage?.local?.get(['ghToken'], r) || r({}));
+        if (observerMode === 'gist' && cfg.ghToken) {
+          headers['Authorization'] = `Bearer ${cfg.ghToken}`;
+        }
+        const res = await fetch(OBSERVER_URL, { headers });
         if (!res.ok) continue;
-        const data = await res.json();
+        let data = await res.json();
+        // Unwrap gist envelope
+        if (data.files?.['status.json']?.content) {
+          data = JSON.parse(data.files['status.json'].content);
+        }
 
         if (data.status === 'waiting') {
           observerEl.classList.remove('active');

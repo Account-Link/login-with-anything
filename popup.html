@@ -1,108 +1,95 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Shave and a Haircut</title>
+<title>Login with Anything</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: system-ui; background: #0a0a0a; color: #e5e5e5; width: 400px; padding: 24px; }
-
-h1 { font-size: 18px; margin-bottom: 4px; }
-.sub { font-size: 12px; color: #888; margin-bottom: 20px; }
-
-label { font-size: 12px; color: #888; display: block; margin-bottom: 4px; }
-input, select { background: #1a1a1a; color: #e5e5e5; border: 1px solid #333; border-radius: 6px; padding: 6px 10px; font-size: 13px; width: 100%; }
-select { cursor: pointer; }
-
-.field { margin-bottom: 16px; }
-
-.beats { display: flex; justify-content: center; gap: 6px; margin: 20px 0 8px; align-items: end; }
-.beat { width: 28px; height: 28px; border-radius: 50%; border: 2px solid #333; transition: all 0.15s; }
-.beat.small { width: 22px; height: 22px; }
-.beat.big { width: 34px; height: 34px; }
-.beat.gap { width: 16px; border: none; }
-.beat.pending { background: #eab308; border-color: #eab308; }
-.beat.hit { background: #22c55e; border-color: #22c55e; }
-.beat.miss { background: #ef4444; border-color: #ef4444; }
-
-.labels { display: flex; justify-content: center; gap: 6px; margin-bottom: 16px; font-size: 10px; color: #555; }
-.labels span { width: 28px; text-align: center; }
-.labels .small { width: 22px; }
-.labels .big { width: 34px; }
-.labels .gap { width: 16px; }
-
-#tap-btn { display: block; margin: 0 auto; font-size: 28px; padding: 16px 56px; border-radius: 12px; border: 2px solid #2563eb; background: #1a1a1a; color: #e5e5e5; cursor: pointer; user-select: none; transition: all 0.1s; }
-#tap-btn:hover { background: #1d2d50; }
-#tap-btn:active { background: #2563eb; transform: scale(0.96); }
-#tap-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-
-.controls { display: flex; justify-content: center; gap: 8px; margin-top: 12px; }
-.btn { padding: 5px 12px; border-radius: 6px; border: 1px solid #333; background: #1a1a1a; color: #e5e5e5; font-size: 12px; cursor: pointer; }
+body { font-family: system-ui; background: #0a0a0a; color: #e5e5e5; width: 360px; padding: 20px; }
+h1 { font-size: 16px; margin-bottom: 4px; }
+.sub { font-size: 11px; color: #888; margin-bottom: 16px; }
+label { font-size: 11px; color: #888; display: block; margin-bottom: 3px; }
+input, select { background: #1a1a1a; color: #e5e5e5; border: 1px solid #333; border-radius: 6px; padding: 5px 8px; font-size: 12px; width: 100%; }
+.field { margin-bottom: 12px; }
+.btn { padding: 6px 14px; border-radius: 6px; border: 1px solid #333; background: #1a1a1a; color: #e5e5e5; font-size: 12px; cursor: pointer; }
 .btn:hover { background: #262626; }
-
-#status { text-align: center; margin-top: 12px; font-size: 12px; color: #888; min-height: 18px; }
-#result { text-align: center; margin-top: 8px; font-size: 22px; font-weight: 700; min-height: 30px; }
-
-.runner-status { margin-top: 16px; padding: 10px; background: #161616; border: 1px solid #262626; border-radius: 8px; font-size: 11px; color: #888; display: none; }
-.runner-status .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
-.runner-status .dot.waiting { background: #eab308; }
-.runner-status .dot.polling { background: #22c55e; }
-.runner-status .dot.done { background: #2563eb; }
+.btn.primary { border-color: #1d9bf0; color: #1d9bf0; }
+.btn.primary:hover { background: #1d9bf022; }
+.actions { display: flex; gap: 8px; margin-top: 12px; }
+#status { font-size: 11px; color: #888; margin-top: 8px; min-height: 14px; }
+hr { border: none; border-top: 1px solid #262626; margin: 12px 0; }
 </style>
 </head>
 <body>
-  <h1>Log in with Shave and a Haircut</h1>
-  <p class="sub">Tap the rhythm. The runner watches.</p>
+  <h1>Login with Anything</h1>
+  <p class="sub">Configure observer and dispatch workflows</p>
 
   <div class="field">
-    <label>Tweet URL or ID</label>
-    <input id="tweet-input" type="text" placeholder="https://x.com/user/status/123... or just 123...">
-  </div>
-
-  <div class="field">
-    <label>Mode</label>
-    <select id="mode-select">
-      <option value="local">Local (extension only)</option>
-      <option value="github">GitHub Actions (attested)</option>
+    <label>Observer Mode</label>
+    <select id="mode">
+      <option value="local">Local (localhost:3456)</option>
+      <option value="gist">GitHub Gist</option>
     </select>
   </div>
 
-  <div class="beats">
-    <div class="beat" data-i="0"></div>
-    <div class="beat" data-i="1"></div>
-    <div class="beat" data-i="2"></div>
-    <div class="beat small" data-i="3"></div>
-    <div class="beat" data-i="4"></div>
-    <div class="beat gap"></div>
-    <div class="beat" data-i="5"></div>
-    <div class="beat big" data-i="6"></div>
-  </div>
-  <div class="labels">
-    <span>&#9829;</span>
-    <span>&#9825;</span>
-    <span>&#9829;</span>
-    <span class="small">&#9825;</span>
-    <span>&#9829;</span>
-    <span class="gap"></span>
-    <span>&#9825;</span>
-    <span class="big">&#9829;</span>
+  <div class="field" id="gist-fields" style="display:none">
+    <label>Gist ID (for status signaling)</label>
+    <input id="gist-id" type="text" placeholder="abc123...">
+    <label style="margin-top:6px">GitHub Token</label>
+    <input id="gh-token" type="password" placeholder="ghp_...">
   </div>
 
-  <button id="tap-btn" disabled>TAP</button>
-
-  <div class="controls">
-    <button class="btn" id="reset-btn">Reset</button>
-    <button class="btn" id="open-tweet-btn">Open Tweet</button>
+  <hr>
+  <div class="field">
+    <label>GitHub Repo</label>
+    <input id="repo" type="text" value="amiller/login-with-anything">
   </div>
 
-  <div id="status">Enter a tweet to begin</div>
-  <div id="result"></div>
-
-  <div class="runner-status" id="runner-status">
-    <span class="dot waiting"></span>
-    <span id="runner-text">Waiting for runner...</span>
+  <div class="actions">
+    <button class="btn primary" id="save">Save Settings</button>
+    <button class="btn" id="dispatch-star">Dispatch: Star</button>
   </div>
+  <div id="status"></div>
 
-  <script src="twitter.js"></script>
-  <script src="shave.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+
+$('mode').addEventListener('change', () => {
+  $('gist-fields').style.display = $('mode').value === 'gist' ? 'block' : 'none';
+});
+
+// Load saved settings
+chrome.storage.local.get(['observerMode', 'gistId', 'ghToken', 'repo'], cfg => {
+  if (cfg.observerMode) $('mode').value = cfg.observerMode;
+  if (cfg.gistId) $('gist-id').value = cfg.gistId;
+  if (cfg.ghToken) $('gh-token').value = cfg.ghToken;
+  if (cfg.repo) $('repo').value = cfg.repo;
+  $('mode').dispatchEvent(new Event('change'));
+});
+
+$('save').addEventListener('click', () => {
+  chrome.storage.local.set({
+    observerMode: $('mode').value,
+    gistId: $('gist-id').value,
+    ghToken: $('gh-token').value,
+    repo: $('repo').value,
+  });
+  $('status').textContent = 'Saved';
+});
+
+$('dispatch-star').addEventListener('click', async () => {
+  const cfg = await chrome.storage.local.get(['ghToken', 'repo']);
+  if (!cfg.ghToken) { $('status').textContent = 'Need GitHub token'; return; }
+  $('status').textContent = 'Dispatching...';
+  const res = await fetch(`https://api.github.com/repos/${cfg.repo}/actions/workflows/github-star.yml/dispatches`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${cfg.ghToken}`,
+      'Accept': 'application/vnd.github.v3+json',
+    },
+    body: JSON.stringify({ ref: 'main', inputs: { repo: cfg.repo } }),
+  });
+  $('status').textContent = res.ok ? 'Dispatched! Star/unstar the repo in rhythm.' : `Error: ${res.status}`;
+});
+</script>
 </body>
 </html>
