@@ -7,14 +7,21 @@ async function init() {
     try { currentDomain = new URL(tab.url).hostname.replace(/^www\./, '') } catch {}
   }
 
-  // Show current site
   const el = $('current')
   if (currentDomain && !currentDomain.startsWith('chrome')) {
-    const res = await chrome.runtime.sendMessage({ type: 'getCookies', domain: currentDomain })
-    const count = Array.isArray(res) ? res.length : 0
-    el.innerHTML = `<div class="domain">${currentDomain}</div><div class="count">${count} cookies available</div>`
-    $('btnTee').disabled = count === 0
-    $('btnGh').disabled = count === 0
+    // Check if we already have permission
+    const origins = [`https://${currentDomain}/*`, `https://*.${currentDomain}/*`]
+    const hasPermission = await chrome.permissions.contains({ origins })
+
+    if (hasPermission) {
+      const res = await chrome.runtime.sendMessage({ type: 'getCookies', domain: currentDomain })
+      const count = Array.isArray(res) ? res.length : 0
+      el.innerHTML = `<div class="domain">${currentDomain}</div><div class="count">${count} cookies available</div>`
+    } else {
+      el.innerHTML = `<div class="domain">${currentDomain}</div><div class="count">Click a button below to grant access</div>`
+    }
+    $('btnTee').disabled = false
+    $('btnGh').disabled = false
   } else {
     el.innerHTML = '<div class="domain" style="color:#999">Navigate to a site first</div>'
     $('btnTee').disabled = true
