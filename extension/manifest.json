@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Teleport Extension",
+  "version": "0.2.0",
+  "description": "Teleport — sync cookies and browse history via TEE",
+  "permissions": ["cookies", "storage", "activeTab", "scripting", "alarms", "tabs", "notifications"],
+  "optional_host_permissions": ["<all_urls>"],
+  "host_permissions": ["https://tee.oauth3-stage.monerolink.com/*"],
+  "background": { "service_worker": "service-worker.js" },
+  "icons": { "16": "icon16.png", "32": "icon32.png", "48": "icon48.png", "128": "icon128.png" },
+  "action": { "default_popup": "popup.html", "default_icon": { "16": "icon16.png", "32": "icon32.png", "48": "icon48.png" } },
+  "content_scripts": [{
+    "matches": ["https://tee.oauth3-stage.monerolink.com/approve/*", "https://oauth3-stage.monerolink.com/approve/*"],
+    "js": ["approve-inject.js"],
+    "run_at": "document_start"
+  }, {
+    "matches": ["https://www.youtube.com/*", "https://youtube.com/*", "https://www.tiktok.com/*", "https://tiktok.com/*", "https://www.instagram.com/*", "https://instagram.com/*"],
+    "js": ["shorts-counter.js"],
+    "run_at": "document_idle"
+  }]
+}

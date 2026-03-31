@@ -8,6 +8,7 @@
     "@anthropic-ai/sdk": "^0.39.0",
     "@octokit/rest": "^21.0.0",
     "adm-zip": "^0.5.10",
+    "better-sqlite3": "^11.10.0",
     "express": "^4.21.2"
   }
 }

@@ -1,0 +1,38 @@
+services:
+  browser:
+    build:
+      context: ./tee-browser
+      dockerfile: Dockerfile.neko
+    shm_size: 2gb
+    cap_add:
+      - SYS_ADMIN
+    environment:
+      NEKO_DESKTOP_SCREEN: "1920x1080@30"
+      NEKO_WEBRTC_ICELITE: "true"
+      NEKO_WEBRTC_TCPMUX: "56000"
+      NEKO_NAT1TO1: "127.0.0.1"
+      NEKO_WEBRTC_ICESERVERS_FRONTEND: ""
+      NEKO_WEBRTC_ICESERVERS_BACKEND: ""
+      NEKO_MEMBER_PROVIDER: multiuser
+      NEKO_MEMBER_MULTIUSER_USER_PASSWORD: proof
+      NEKO_MEMBER_MULTIUSER_ADMIN_PASSWORD: proof_admin
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 10s
+      retries: 5
+      timeout: 5s
+
+  app:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    ports:
+      - "3003:3003"
+    environment:
+      PORT: "3003"
+      TEE_BROWSER_URL: "http://browser:3000"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      GITHUB_TOKEN: "${GITHUB_TOKEN:-}"
+    depends_on:
+      browser:
+        condition: service_healthy

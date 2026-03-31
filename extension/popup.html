@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { width: 320px; font-family: system-ui; font-size: 13px; margin: 0; padding: 12px; }
+  h1 { font-size: 16px; margin: 0 0 12px; }
+  .site { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #eee; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .dot.ok { background: #22c55e; }
+  .dot.pending { background: #eab308; }
+  .dot.error { background: #ef4444; }
+  .dot.tracking { background: #3b82f6; }
+  .site .domain { flex: 1; }
+  .site .meta { color: #999; font-size: 11px; }
+  .site button { background: none; border: none; cursor: pointer; color: #999; font-size: 16px; padding: 0 4px; }
+  .site button:hover { color: #ef4444; }
+  .sync-toggle { font-size: 14px !important; }
+  .sync-toggle:hover { color: #2563eb !important; }
+  #add { width: 100%; margin-top: 12px; padding: 8px; cursor: pointer; background: #2563eb; color: white; border: none; border-radius: 6px; font-size: 13px; }
+  #add:hover { background: #1d4ed8; }
+  #add:disabled { background: #94a3b8; cursor: default; }
+  #status { margin-top: 8px; color: #666; font-size: 11px; text-align: center; }
+  #empty { color: #999; text-align: center; padding: 20px 0; }
+  #dash { display: block; text-align: center; margin-top: 10px; color: #2563eb; font-size: 12px; text-decoration: none; cursor: pointer; }
+  #dash:hover { text-decoration: underline; }
+  #consent-banner { display: none; margin-top: 10px; padding: 10px; background: #f0f9ff; border: 1px solid #bfdbfe; border-radius: 6px; font-size: 12px; }
+  #consent-banner p { margin: 0 0 8px; color: #1e40af; }
+  #consent-banner .consent-btns { display: flex; gap: 6px; }
+  #consent-banner button { flex: 1; padding: 6px; border: none; border-radius: 4px; font-size: 11px; cursor: pointer; }
+  #consent-yes { background: #2563eb; color: white; }
+  #consent-yes:hover { background: #1d4ed8; }
+  #consent-no { background: #e5e7eb; color: #374151; }
+  #consent-no:hover { background: #d1d5db; }
+</style>
+</head>
+<body>
+  <h1>Teleport</h1>
+  <div id="sites"></div>
+  <div id="empty">No tracked sites yet</div>
+  <button id="add">Track this site</button>
+  <div id="consent-banner">
+    <p>Sync <strong id="consent-domain"></strong> cookies to Teleport Computer?</p>
+    <div class="consent-btns">
+      <button id="consent-yes">Yes, sync to Teleport</button>
+      <button id="consent-no">No, track locally</button>
+    </div>
+  </div>
+  <div id="status"></div>
+  <div style="margin-top:12px;border-top:1px solid #eee;padding-top:8px">
+    <div style="font-size:11px;color:#999;margin-bottom:4px">Account</div>
+    <div id="account-info" style="font-size:11px;color:#666;margin-bottom:6px"></div>
+    <input id="email-input" type="email" placeholder="your@email.com" style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:12px;margin-bottom:4px;display:none">
+    <button id="login-btn" style="width:100%;padding:6px;cursor:pointer;background:#16a34a;color:white;border:none;border-radius:4px;font-size:12px;display:none">Send Magic Link</button>
+  </div>
+  <a id="dash" href="#">Dashboard</a>
+  <script src="popup.js"></script>
+</body>
+</html>

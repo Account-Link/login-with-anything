@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Teleport</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui; background: #0a0a0a; color: #e5e5e5; padding: 32px; max-width: 900px; margin: 0 auto; padding-bottom: 60px; }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  h1 span { color: #666; font-weight: normal; font-size: 14px; margin-left: 8px; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 0; margin-bottom: 24px; border-bottom: 1px solid #262626; }
+  .tab { padding: 10px 20px; font-size: 13px; color: #666; cursor: pointer; border-bottom: 2px solid transparent; }
+  .tab:hover { color: #ccc; }
+  .tab.active { color: #e5e5e5; border-bottom-color: #2563eb; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* Cards */
+  .card { background: #161616; border: 1px solid #262626; border-radius: 10px; padding: 20px; margin-bottom: 16px; }
+  .card:hover { border-color: #333; }
+
+  .site-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .site-header .domain { font-size: 16px; font-weight: 600; flex: 1; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .dot.ok { background: #22c55e; }
+  .dot.pending { background: #eab308; }
+  .dot.error { background: #ef4444; }
+  .dot.tracking { background: #3b82f6; }
+
+  .meta-row { display: flex; gap: 24px; font-size: 12px; color: #888; margin-bottom: 12px; }
+  .meta-row .label { color: #555; }
+
+  .cookies-table { width: 100%; font-size: 12px; border-collapse: collapse; }
+  .cookies-table th { text-align: left; color: #555; font-weight: normal; padding: 4px 8px; border-bottom: 1px solid #222; }
+  .cookies-table td { padding: 4px 8px; border-bottom: 1px solid #1a1a1a; font-family: monospace; font-size: 11px; }
+  .cookies-table td.val { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cookies-table tr:hover td { background: #1a1a1a; }
+  .expiry-warn { color: #eab308; }
+  .expiry-expired { color: #ef4444; }
+
+  .actions { display: flex; gap: 8px; align-items: center; }
+  .btn { padding: 6px 14px; border-radius: 6px; border: 1px solid #333; background: #1a1a1a; color: #e5e5e5; font-size: 12px; cursor: pointer; }
+  .btn:hover { background: #262626; }
+  .btn.primary { background: #2563eb; border-color: #2563eb; }
+  .btn.primary:hover { background: #1d4ed8; }
+  .btn.danger { color: #ef4444; }
+  .btn.danger:hover { background: #1c1111; }
+
+  .toggle { font-size: 12px; color: #555; cursor: pointer; border: none; background: none; padding: 0; }
+  .toggle:hover { color: #888; }
+
+  .sync-switch { position: relative; width: 36px; height: 20px; cursor: pointer; }
+  .sync-switch input { opacity: 0; width: 0; height: 0; }
+  .sync-switch .slider { position: absolute; inset: 0; background: #333; border-radius: 10px; transition: background .2s; }
+  .sync-switch .slider::before { content: ''; position: absolute; width: 16px; height: 16px; left: 2px; top: 2px; background: #888; border-radius: 50%; transition: transform .2s, background .2s; }
+  .sync-switch input:checked + .slider { background: #2563eb; }
+  .sync-switch input:checked + .slider::before { transform: translateX(16px); background: #fff; }
+
+  #empty { text-align: center; color: #555; padding: 60px 0; }
+  #empty p { margin-bottom: 12px; }
+
+  .status-bar { position: fixed; bottom: 0; left: 0; right: 0; padding: 8px 32px; background: #161616; border-top: 1px solid #262626; font-size: 12px; color: #888; display: flex; justify-content: space-between; }
+
+  /* YouTube tab */
+  .yt-controls { display: flex; gap: 12px; align-items: center; margin-bottom: 20px; }
+  .yt-controls select, .yt-controls button { font-size: 13px; }
+  .yt-controls select { background: #1a1a1a; color: #e5e5e5; border: 1px solid #333; border-radius: 6px; padding: 6px 10px; }
+  #yt-status { font-size: 12px; color: #888; }
+
+  /* Stats grid */
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .stat-card { background: #161616; border: 1px solid #262626; border-radius: 8px; padding: 16px; text-align: center; }
+  .stat-card .value { font-size: 24px; font-weight: 700; }
+  .stat-card .label { font-size: 11px; color: #888; margin-top: 4px; }
+
+  /* Channel list */
+  .channel-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid #1a1a1a; font-size: 13px; }
+  .channel-row .rank { color: #555; width: 24px; text-align: right; }
+  .channel-row .name { flex: 1; }
+  .channel-row .bar-bg { width: 120px; height: 6px; background: #1a1a1a; border-radius: 3px; }
+  .channel-row .bar { height: 6px; background: #2563eb; border-radius: 3px; }
+  .channel-row .count { color: #888; font-size: 12px; width: 80px; text-align: right; }
+
+  /* Category bars */
+  .cat-row { display: flex; align-items: center; gap: 12px; padding: 6px 0; font-size: 13px; }
+  .cat-row .cat-name { width: 120px; }
+  .cat-row .cat-bar-bg { flex: 1; height: 8px; background: #1a1a1a; border-radius: 4px; }
+  .cat-row .cat-bar { height: 8px; border-radius: 4px; }
+  .cat-row .cat-pct { width: 50px; text-align: right; color: #888; font-size: 12px; }
+
+  /* Video feed */
+  .video-item { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid #1a1a1a; }
+  .video-item img { width: 120px; height: 68px; object-fit: cover; border-radius: 6px; background: #1a1a1a; flex-shrink: 0; }
+  .video-meta { flex: 1; font-size: 12px; }
+  .video-meta .title { font-size: 13px; color: #e5e5e5; margin-bottom: 4px; }
+  .video-meta .title a { color: #e5e5e5; text-decoration: none; }
+  .video-meta .title a:hover { color: #93c5fd; }
+  .video-meta .channel { color: #888; }
+  .video-meta .dur { color: #555; }
+  .date-header { font-size: 14px; font-weight: 600; padding: 16px 0 8px; border-bottom: 1px solid #262626; margin-bottom: 4px; }
+
+  /* Binges / superlatives */
+  .insight { padding: 8px 12px; margin-bottom: 8px; background: #161616; border-left: 3px solid #2563eb; border-radius: 0 6px 6px 0; font-size: 13px; }
+  .insight .highlight { color: #93c5fd; }
+
+  h2 { font-size: 16px; margin: 24px 0 12px; }
+  h3 { font-size: 14px; color: #888; margin: 16px 0 8px; }
+
+  /* Week summary hero */
+  .week-hero { background: linear-gradient(135deg, #1a1a2e, #16213e); border: 1px solid #2563eb33; border-radius: 12px; padding: 24px; margin-bottom: 20px; text-align: center; }
+  .week-hero .hero-title { font-size: 13px; color: #888; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
+  .week-hero .hero-stats { display: flex; justify-content: center; gap: 32px; flex-wrap: wrap; }
+  .week-hero .hero-stat .value { font-size: 28px; font-weight: 700; }
+  .week-hero .hero-stat .label { font-size: 11px; color: #888; margin-top: 2px; }
+
+  /* Histogram */
+  .histogram { display: flex; align-items: flex-end; gap: 8px; height: 120px; padding: 0 4px; margin-bottom: 24px; }
+  .hist-day { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; }
+  .hist-stack { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; width: 100%; min-width: 0; }
+  .hist-bar { width: 100%; border-radius: 4px 4px 0 0; min-height: 0; transition: height .3s; }
+  .hist-bar.shorts { background: #a855f7; border-radius: 0; }
+  .hist-bar.long { background: #2563eb; border-radius: 4px 4px 0 0; }
+  .hist-bar.tt { background: #ee1d52; border-radius: 4px 4px 0 0; }
+  .hist-day.today .hist-bar { box-shadow: 0 0 8px rgba(37,99,235,.5); }
+  .hist-day.today .hist-bar.tt { box-shadow: 0 0 8px rgba(238,29,82,.5); }
+  .hist-label { font-size: 10px; color: #555; }
+  .hist-day.today .hist-label { color: #e5e5e5; font-weight: 600; }
+  .hist-count { font-size: 10px; color: #888; }
+
+  /* TEE attestation panel */
+  .tee-panel { display: flex; align-items: center; gap: 14px; background: #161616; border: 1px solid #262626; border-radius: 10px; padding: 14px 20px; margin-bottom: 20px; }
+  .tee-panel .shield { flex-shrink: 0; width: 32px; height: 32px; }
+  .tee-panel .shield svg { width: 32px; height: 32px; }
+  .tee-panel .tee-info { flex: 1; }
+  .tee-panel .tee-status { font-size: 14px; font-weight: 600; }
+  .tee-panel .tee-platform { font-size: 12px; color: #888; margin-top: 2px; }
+  .tee-panel.verified { border-color: #166534; }
+  .tee-panel.verified .tee-status { color: #22c55e; }
+  .tee-panel.checking .tee-status { color: #eab308; }
+  .tee-panel.failed .tee-status { color: #ef4444; }
+  .tee-panel.failed { border-color: #7f1d1d; }
+  .tee-explainer { font-size: 12px; color: #888; margin-top: 8px; line-height: 1.5; display: none; }
+  .tee-explainer.open { display: block; }
+  .tee-toggle { font-size: 11px; color: #555; cursor: pointer; border: none; background: none; padding: 0; margin-top: 4px; }
+  .tee-toggle:hover { color: #888; }
+  .tee-measurements { font-family: monospace; font-size: 10px; color: #555; margin-top: 6px; word-break: break-all; line-height: 1.6; display: none; }
+  .tee-measurements.open { display: block; }
+  .tee-copy-quote { font-size: 11px; color: #888; cursor: pointer; border: 1px solid #333; background: #1a1a1a; border-radius: 4px; padding: 3px 10px; margin-top: 6px; }
+  .tee-copy-quote:hover { background: #262626; color: #e5e5e5; }
+
+  /* TEE observability */
+  .tee-error { color: #ef4444; font-size: 13px; white-space: pre-wrap; font-family: monospace; padding: 12px; background: #1c1111; border: 1px solid #ef4444; border-radius: 8px; margin-bottom: 16px; }
+  .tee-table { width: 100%; font-size: 13px; border-collapse: collapse; }
+  .tee-table th { text-align: left; color: #555; font-weight: normal; padding: 8px; border-bottom: 1px solid #262626; }
+  .tee-table td { padding: 8px; border-bottom: 1px solid #1a1a1a; }
+  .tee-table tr:hover td { background: #1a1a1a; }
+  .sync-match { color: #22c55e; }
+  .sync-mismatch { color: #eab308; }
+
+  /* Sync health panel */
+  .sync-health { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .health-card { background: #161616; border: 1px solid #262626; border-radius: 10px; padding: 14px 16px; }
+  .health-card .health-label { font-size: 11px; color: #555; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
+  .health-card .health-value { font-size: 14px; display: flex; align-items: center; gap: 8px; }
+  .health-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .health-dot.green { background: #22c55e; }
+  .health-dot.yellow { background: #eab308; }
+  .health-dot.red { background: #ef4444; }
+  .health-dot.gray { background: #555; }
+  .health-dot.blue { background: #3b82f6; }
+  .health-dot.yellow, .health-dot.red { animation: pulse-dot 2s ease-in-out infinite; }
+  @keyframes pulse-dot { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .6; transform: scale(1.3); } }
+  .sync-hero { grid-column: 1 / -1; background: linear-gradient(135deg, #0f1a0f, #162016); border: 1px solid #22c55e33; border-radius: 12px; padding: 18px 24px; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 15px; color: #e5e5e5; }
+  .sync-hero.yellow { background: linear-gradient(135deg, #1a1a0f, #1e1c10); border-color: #eab30833; }
+  .sync-hero.red { background: linear-gradient(135deg, #1a0f0f, #201010); border-color: #ef444433; }
+  .sync-hero.gray { background: #161616; border-color: #262626; }
+  .sync-hero .health-dot { width: 10px; height: 10px; }
+  .trend-arrow { font-size: 13px; margin-left: 4px; }
+  .trend-arrow.up { color: #22c55e; }
+  .trend-arrow.down { color: #ef4444; }
+  .trend-arrow.flat { color: #888; }
+  .health-domains { margin-top: 8px; font-size: 12px; }
+  .health-domains .hd-row { display: flex; align-items: center; gap: 6px; padding: 2px 0; color: #888; }
+  .health-gaps { margin-top: 6px; font-size: 12px; color: #888; }
+</style>
+</head>
+<body>
+  <h1>Teleport <span id="count"></span></h1>
+
+  <div id="tee-panel" class="tee-panel checking">
+    <div class="shield" id="tee-shield"></div>
+    <div class="tee-info">
+      <div class="tee-status" id="tee-status-text">Checking attestation...</div>
+      <div class="tee-platform" id="tee-platform"></div>
+      <button class="tee-toggle" id="tee-toggle">What does this mean?</button>
+      <div class="tee-explainer" id="tee-explainer">Your data is processed inside a Confidential VM powered by dstack on Intel TDX hardware. The TEE ensures that even the server operator cannot access your data. The attestation measurement cryptographically proves the code running inside has not been tampered with.</div>
+      <div class="tee-measurements" id="tee-measurements"></div>
+      <button class="tee-copy-quote" id="tee-copy-quote" style="display:none">Copy Quote</button>
+    </div>
+  </div>
+
+  <div id="sync-health" class="sync-health"></div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="sites">Tracked Sites</div>
+    <div class="tab" data-tab="youtube">YouTube</div>
+    <div class="tab" data-tab="tiktok">TikTok</div>
+    <div class="tab" data-tab="tee">TEE</div>
+    <div class="tab" data-tab="feedling">Feedling</div>
+    <div class="tab" data-tab="feed-browser">Feed Browser</div>
+    <div class="tab" data-tab="hivemind">Hivemind</div>
+    <div class="tab" data-tab="settings">Settings</div>
+  </div>
+
+  <div id="tab-sites" class="tab-content active">
+    <div id="sites"></div>
+    <div id="empty">
+      <p>No tracked sites</p>
+      <p style="font-size:12px">Click the extension icon on any site to start tracking</p>
+    </div>
+  </div>
+
+  <div id="tab-youtube" class="tab-content">
+    <div class="yt-controls">
+      <button class="btn primary" id="yt-sync">Sync New</button>
+      <button class="btn" id="yt-load-more" style="display:none">Load Older</button>
+      <button class="btn danger" id="yt-clear" style="font-size:11px">Clear</button>
+      <span id="yt-status"></span>
+    </div>
+    <div id="yt-coverage" style="font-size:12px;color:#666;margin-bottom:16px"></div>
+    <div id="yt-results"></div>
+  </div>
+
+  <div id="tab-tiktok" class="tab-content">
+    <div class="yt-controls">
+      <button class="btn primary" id="tt-sync">Sync New</button>
+      <button class="btn" id="tt-load-more" style="display:none">Load Older</button>
+      <button class="btn danger" id="tt-clear" style="font-size:11px">Clear</button>
+      <span id="tt-status"></span>
+    </div>
+    <div id="tt-coverage" style="font-size:12px;color:#666;margin-bottom:16px"></div>
+    <div id="tt-results"></div>
+  </div>
+
+  <div id="tab-tee" class="tab-content">
+    <div id="tee-content">Loading TEE state...</div>
+  </div>
+
+  <div id="tab-feedling" class="tab-content">
+    <div class="card">
+      <div class="site-header">
+        <div class="domain">Feedling iOS Connection</div>
+        <label class="sync-switch">
+          <input type="checkbox" id="feedling-toggle">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div style="font-size:12px;color:#888;margin-bottom:12px">Send activity summaries to Feedling iOS app via TEE</div>
+      <div id="feedling-status" style="font-size:12px;color:#555"></div>
+    </div>
+    <div id="feedling-preview"></div>
+  </div>
+
+  <div id="tab-feed-browser" class="tab-content">
+    <div class="card">
+      <div class="site-header">
+        <div class="domain">Bridge Connection</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="dot" id="fb-status-dot"></div>
+          <span id="fb-status-text" style="font-size:12px;color:#888">Unknown</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <input type="text" id="fb-bridge-url" style="flex:1;background:#1a1a1a;color:#e5e5e5;border:1px solid #333;border-radius:6px;padding:6px 10px;font-size:13px" placeholder="http://localhost:3001">
+        <button class="btn" id="fb-save-url">Save</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:16px">
+        <input type="text" id="fb-novnc-url" style="flex:1;background:#1a1a1a;color:#e5e5e5;border:1px solid #333;border-radius:6px;padding:6px 10px;font-size:13px" placeholder="http://localhost:8080">
+        <label style="font-size:12px;color:#888;align-self:center;white-space:nowrap">noVNC URL</label>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:16px">
+        <button class="btn primary" id="fb-nav-yt">Navigate to YouTube</button>
+        <button class="btn primary" id="fb-nav-tt">Navigate to TikTok</button>
+        <button class="btn" id="fb-nav-tee-dash" style="background:#2d1f4e;border-color:#7c3aed">View TEE Dashboard</button>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+        <button class="btn" id="fb-inject-yt">Inject YouTube Cookies</button>
+        <button class="btn" id="fb-inject-tt">Inject TikTok Cookies</button>
+        <span id="fb-inject-status" style="font-size:12px;color:#888"></span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px">
+        <button class="btn" id="fb-sync-history" style="background:#2d1f4e;border-color:#7c3aed">Fetch History on TEE</button>
+        <button class="btn" id="fb-sync-and-view" style="background:#2d1f4e;border-color:#7c3aed">Fetch & View Dashboard</button>
+        <span id="fb-sync-status" style="font-size:12px;color:#888"></span>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn" id="fb-scroll-up" style="flex:1;font-size:18px">&#x2191; Scroll Up</button>
+        <button class="btn" id="fb-scroll-down" style="flex:1;font-size:18px">&#x2193; Scroll Down</button>
+      </div>
+      <div id="fb-log" style="margin-top:12px;font-size:11px;color:#555;max-height:120px;overflow-y:auto"></div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <div class="site-header">
+        <div class="domain">Remote Browser</div>
+        <button class="btn" id="fb-viewer-toggle">Show</button>
+      </div>
+      <iframe id="fb-viewer-iframe" style="display:none;width:100%;height:600px;border:1px solid #333;border-radius:6px;background:#000"></iframe>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <div class="site-header">
+        <div class="domain">Auto-Scroll & Capture</div>
+        <span id="fb-platform" style="font-size:12px;color:#888">—</span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+        <label style="font-size:12px;color:#888">Interval (ms):</label>
+        <input type="number" id="fb-scroll-interval" value="5000" min="1000" step="500" style="width:80px;background:#1a1a1a;color:#e5e5e5;border:1px solid #333;border-radius:6px;padding:6px 10px;font-size:13px">
+        <button class="btn primary" id="fb-auto-start">Start Auto-Scroll</button>
+        <button class="btn danger" id="fb-auto-stop" disabled>Stop</button>
+        <button class="btn" id="fb-clear-posts">Clear Posts</button>
+      </div>
+      <div id="fb-post-count" style="font-size:12px;color:#888;margin-bottom:8px"></div>
+      <div id="fb-captured-posts" style="max-height:400px;overflow-y:auto"></div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <div class="site-header">
+        <div class="domain">Roast Log</div>
+      </div>
+      <div id="fb-roast-log" style="max-height:300px;overflow-y:auto;font-size:12px"></div>
+    </div>
+  </div>
+
+  <div id="tab-hivemind" class="tab-content">
+    <h2 style="margin-bottom:16px">Hivemind Sync</h2>
+    <div id="hm-config"></div>
+    <div id="hm-status" style="margin:12px 0"></div>
+    <div id="hm-actions"></div>
+    <div id="hm-log" style="margin-top:12px;font-size:12px;color:#888;max-height:200px;overflow-y:auto"></div>
+  </div>
+
+  <div id="tab-settings" class="tab-content">
+    <div id="settings-content"></div>
+  </div>
+
+  <div class="status-bar">
+    <span id="server-status">Checking server...</span>
+    <span id="token-status"></span>
+  </div>
+  <script src="feed-scroller.js"></script>
+  <script src="youtube.js"></script>
+  <script src="tiktok.js"></script>
+  <script src="settings.js"></script>
+  <script src="dashboard.js"></script>
+</body>
+</html>

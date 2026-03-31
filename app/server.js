@@ -1,5 +1,6 @@
 import express from 'express'
 import Anthropic from '@anthropic-ai/sdk'
+import Database from 'better-sqlite3'
 import fs from 'fs'
 import path from 'path'
 import { PROOF_CATALOG, getRandomProofs, getTotalProofCount } from './proofs.js'
@@ -11,45 +12,74 @@ app.use(express.static('public'))
 
 const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic() : null
 const sessions = new Map()  // runId -> { proof, screenshot, messages: [] }
-const wall = []  // public message wall
-const proofCache = new Map()  // proofId -> cached workflow run URLs
-const workflowCache = new Map()  // proofId -> generated workflow YAML
+const proofCache = new Map()
+const workflowCache = new Map()
+
+// SQLite for persistent boards + posts
+const DB_PATH = process.env.DB_PATH || '/data/forum.db'
+try { fs.mkdirSync(path.dirname(DB_PATH), { recursive: true }) } catch {}
+const db = new Database(DB_PATH)
+db.pragma('journal_mode = WAL')
+db.exec(`
+  CREATE TABLE IF NOT EXISTS boards (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    predicate TEXT NOT NULL,
+    method TEXT NOT NULL,
+    site TEXT,
+    description TEXT
+  );
+  CREATE TABLE IF NOT EXISTS posts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    board_id TEXT NOT NULL REFERENCES boards(id),
+    identity TEXT NOT NULL,
+    evidence TEXT,
+    message TEXT NOT NULL,
+    members_only INTEGER DEFAULT 0,
+    timestamp TEXT NOT NULL
+  );
+`)
 
 // --- Forum: boards and posts ---
-const boards = new Map()
-const posts = new Map()  // boardId -> [posts]
-const verifiedSessions = new Map()  // token -> { boardId, identity }
-let boardCounter = 0
+const verifiedSessions = new Map()  // token -> { boardId, identity, evidence }
 
-// Seed some example boards
-for (const b of [
-  { name: 'Anthropic Customers', predicate: 'Valid Anthropic API key', method: 'api_key', site: 'api.anthropic.com', description: 'Paste an Anthropic API key to prove you are a customer.' },
-  { name: 'GitHub Developers', predicate: 'Valid GitHub PAT', method: 'api_key', site: 'api.github.com', description: 'Paste a GitHub personal access token.' },
-  { name: 'High Karma Redditors', predicate: 'Reddit karma > 1000', method: 'browser', site: 'reddit.com', description: 'Paste your reddit_session cookie. Verified via TEE browser.' },
-  { name: "Today's Wordle", predicate: 'Solved today\'s Wordle', method: 'browser', site: 'nytimes.com', description: 'Paste your NYT-S cookie. Verified via TEE browser.' },
-]) {
-  const id = `board-${++boardCounter}`
-  boards.set(id, { id, ...b, postCount: 0 })
-  posts.set(id, [])
+// DB helpers
+const stmts = {
+  getBoards: db.prepare(`SELECT b.*, (SELECT COUNT(*) FROM posts WHERE board_id = b.id) as postCount FROM boards b`),
+  getBoard: db.prepare(`SELECT b.*, (SELECT COUNT(*) FROM posts WHERE board_id = b.id) as postCount FROM boards b WHERE b.id = ?`),
+  insertBoard: db.prepare(`INSERT INTO boards (id, name, predicate, method, site, description) VALUES (?, ?, ?, ?, ?, ?)`),
+  getPosts: db.prepare(`SELECT * FROM posts WHERE board_id = ? ORDER BY id DESC`),
+  insertPost: db.prepare(`INSERT INTO posts (board_id, identity, evidence, message, members_only, timestamp) VALUES (?, ?, ?, ?, ?, ?)`),
+}
+
+// Seed default boards if empty
+if (stmts.getBoards.all().length === 0) {
+  for (const b of [
+    { name: 'Anthropic Customers', predicate: 'Valid Anthropic API key', method: 'api_key', site: 'api.anthropic.com', description: 'Paste an Anthropic API key to prove you are a customer.' },
+    { name: 'GitHub Developers', predicate: 'Valid GitHub PAT', method: 'api_key', site: 'api.github.com', description: 'Paste a GitHub personal access token.' },
+    { name: 'High Karma Redditors', predicate: 'Reddit karma > 1000', method: 'browser', site: 'reddit.com', description: 'Paste your reddit_session cookie. Verified via TEE browser.' },
+    { name: "Today's Wordle", predicate: 'Solved today\'s Wordle', method: 'browser', site: 'nytimes.com', description: 'Paste your NYT-S cookie. Verified via TEE browser.' },
+  ]) {
+    const id = `board-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    stmts.insertBoard.run(id, b.name, b.predicate, b.method, b.site, b.description)
+  }
 }
 
 // Board CRUD
 app.get('/api/boards', (req, res) => {
-  res.json({ boards: [...boards.values()] })
+  res.json({ boards: stmts.getBoards.all() })
 })
 
 app.post('/api/boards', (req, res) => {
   const { name, predicate, method, site, description } = req.body
   if (!name || !predicate) return res.status(400).json({ error: 'name and predicate required' })
-  const id = `board-${++boardCounter}`
-  const board = { id, name, predicate, method: method || 'api_key', site: site || '', description: description || '', postCount: 0 }
-  boards.set(id, board)
-  posts.set(id, [])
-  res.json(board)
+  const id = `board-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+  stmts.insertBoard.run(id, name, predicate, method || 'api_key', site || '', description || '')
+  res.json(stmts.getBoard.get(id))
 })
 
 app.get('/api/boards/:id', (req, res) => {
-  const board = boards.get(req.params.id)
+  const board = stmts.getBoard.get(req.params.id)
   if (!board) return res.status(404).json({ error: 'Board not found' })
   res.json(board)
 })
@@ -57,7 +87,7 @@ app.get('/api/boards/:id', (req, res) => {
 // Verify predicate (API key method)
 app.post('/api/verify', async (req, res) => {
   const { boardId, apiKey } = req.body
-  const board = boards.get(boardId)
+  const board = stmts.getBoard.get(boardId)
   if (!board) return res.status(404).json({ error: 'Board not found' })
 
   try {
@@ -97,7 +127,7 @@ app.post('/api/verify', async (req, res) => {
 // Wordle share block verification
 app.post('/api/verify-wordle', (req, res) => {
   const { boardId, shareText } = req.body
-  const board = boards.get(boardId)
+  const board = stmts.getBoard.get(boardId)
   if (!board) return res.status(404).json({ error: 'Board not found' })
 
   const lines = shareText.trim().split('\n').map(l => l.trim()).filter(Boolean)
@@ -161,7 +191,7 @@ async function drainQueue() {
 // Cookie-based verification via TEE browser
 app.post('/api/verify-cookie', async (req, res) => {
   const { boardId, cookieName, cookieValue, username, site } = req.body
-  const board = boards.get(boardId)
+  const board = stmts.getBoard.get(boardId)
   if (!board) return res.status(404).json({ error: 'Board not found' })
 
   const domain = site.replace(/^www\./, '')
@@ -246,16 +276,16 @@ app.post('/api/verify-cookie', async (req, res) => {
 
 // Board posts
 app.get('/api/boards/:id/posts', (req, res) => {
-  const boardPosts = posts.get(req.params.id) || []
+  const boardPosts = stmts.getPosts.all(req.params.id)
   const token = req.query.session
   const session = token ? verifiedSessions.get(token) : null
   const isMember = session?.boardId === req.params.id
 
-  const visible = boardPosts.slice().reverse().map(p => {
-    if (p.membersOnly && !isMember) {
+  const visible = boardPosts.map(p => {
+    if (p.members_only && !isMember) {
       return { identity: p.identity, evidence: p.evidence, membersOnly: true, redacted: true, timestamp: p.timestamp }
     }
-    return p
+    return { identity: p.identity, evidence: p.evidence, message: p.message, membersOnly: !!p.members_only, timestamp: p.timestamp }
   })
   res.json({ posts: visible })
 })
@@ -267,11 +297,9 @@ app.post('/api/boards/:id/posts', (req, res) => {
   if (!message?.trim()) return res.status(400).json({ error: 'Message required' })
 
   const { membersOnly } = req.body
-  const post = { identity: session.identity, evidence: session.evidence || null, message: message.trim(), membersOnly: !!membersOnly, timestamp: new Date() }
-  const boardPosts = posts.get(req.params.id)
-  boardPosts.push(post)
-  boards.get(req.params.id).postCount = boardPosts.length
-  res.json({ post })
+  const timestamp = new Date().toISOString()
+  stmts.insertPost.run(req.params.id, session.identity, session.evidence || null, message.trim(), membersOnly ? 1 : 0, timestamp)
+  res.json({ post: { identity: session.identity, evidence: session.evidence, message: message.trim(), membersOnly: !!membersOnly, timestamp } })
 })
 
 // Example workflows for LLM context
