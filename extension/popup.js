@@ -31,9 +31,20 @@ function setStatus(type, msg) {
   el.textContent = msg
 }
 
+async function ensurePermission(domain) {
+  const origins = [`https://*.${domain}/*`, `http://*.${domain}/*`]
+  const has = await chrome.permissions.contains({ origins })
+  if (has) return true
+  return chrome.permissions.request({ origins })
+}
+
 $('btnTee').addEventListener('click', async () => {
   if (!currentDomain) return
   $('btnTee').disabled = true
+
+  const granted = await ensurePermission(currentDomain)
+  if (!granted) { setStatus('err', 'Permission denied'); $('btnTee').disabled = false; return }
+
   setStatus('wait', 'Grabbing cookies and sending to TEE...')
 
   const { settings } = await chrome.storage.local.get('settings')
@@ -56,6 +67,10 @@ $('btnTee').addEventListener('click', async () => {
 $('btnGh').addEventListener('click', async () => {
   if (!currentDomain) return
   $('btnGh').disabled = true
+
+  const granted = await ensurePermission(currentDomain)
+  if (!granted) { setStatus('err', 'Permission denied'); $('btnGh').disabled = false; return }
+
   setStatus('wait', 'Dispatching GitHub Actions workflow...')
 
   const { settings } = await chrome.storage.local.get('settings')
