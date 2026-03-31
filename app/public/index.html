@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login with Everything</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, sans-serif;
+      max-width: 900px; margin: 0 auto; padding: 2rem;
+      background: linear-gradient(180deg, #8ecfa0 0%, #c5e8cc 15%, #ffffff 40%);
+      background-attachment: fixed;
+      color: #333;
+      min-height: 100vh;
+    }
+    h1 {
+      font-size: 2.8rem; margin-bottom: 0.1rem; color: #2255cc;
+      font-weight: 800;
+    }
+    .subtitle { color: #888; margin-bottom: 2rem; font-size: 1.1rem; }
+    a { color: #2255cc; }
+    .card {
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(0,0,0,0.08);
+      border-radius: 12px; padding: 1.5rem; margin: 1rem 0;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+    }
+    .card h2 { margin-top: 0; color: #222; font-size: 1.2rem; }
+    input, textarea, select, button {
+      padding: 0.6rem 0.8rem; border-radius: 8px;
+      border: 1px solid #ddd;
+      background: white; color: #333; font-size: 0.95rem;
+    }
+    input::placeholder, textarea::placeholder { color: #aaa; }
+    input, textarea, select { width: 100%; margin-bottom: 0.5rem; }
+    textarea { min-height: 80px; resize: vertical; }
+    button {
+      background: #2255cc; border: none; cursor: pointer;
+      color: white; font-weight: 600;
+      transition: all 0.15s;
+    }
+    button:hover { filter: brightness(1.1); transform: translateY(-1px); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    button.secondary { background: #f0f0f0; color: #555; border: 1px solid #ddd; font-weight: 400; }
+    button.secondary:hover { background: #e5e5e5; }
+    button.danger { background: #cc3333; color: white; }
+    .board {
+      padding: 1rem; background: rgba(255,255,255,0.6); border-radius: 10px;
+      margin: 0.5rem 0; cursor: pointer; border: 2px solid transparent; transition: all 0.15s;
+    }
+    .board:hover { border-color: #8ecfa0; background: rgba(255,255,255,0.9); }
+    .board h3 { margin: 0 0 0.25rem; font-size: 1rem; color: #222; }
+    .board .meta { font-size: 0.8rem; color: #999; }
+    .board .predicate { font-size: 0.85rem; color: #7733bb; font-family: monospace; }
+    .badge {
+      display: inline-block; padding: 0.15rem 0.5rem; border-radius: 12px;
+      font-size: 0.7rem; color: white; vertical-align: middle;
+    }
+    .badge.api_key { background: #7733bb; }
+    .badge.browser { background: #cc5500; }
+    .flair {
+      display: inline-block; padding: 0.15rem 0.5rem; border-radius: 12px;
+      font-size: 0.7rem; background: #eee; color: #777;
+      margin-left: 0.25rem; vertical-align: middle;
+    }
+    .post { border-bottom: 1px solid #eee; padding: 0.75rem 0; }
+    .post:last-child { border-bottom: none; }
+    .post .post-header { margin-bottom: 0.25rem; }
+    .post .author { color: #2255cc; font-size: 0.9rem; font-weight: 600; }
+    .post .body { margin: 0.3rem 0; line-height: 1.4; color: #444; }
+    .post .ts { color: #bbb; font-size: 0.7rem; }
+    .status { padding: 0.75rem; border-radius: 8px; margin: 0.5rem 0; font-size: 0.9rem; color: white; }
+    .status.ok { background: #44aa55; }
+    .status.err { background: #cc3333; }
+    .status.wait { background: #7733bb; }
+    .hidden { display: none; }
+    .row { display: flex; gap: 0.5rem; }
+    .row > * { flex: 1; }
+    .auth-bar {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 0.5rem 0.75rem; background: #f5f5f5;
+      border-radius: 8px; margin-bottom: 0.75rem;
+    }
+    .auth-bar .identity { font-weight: 600; color: #58a6ff; }
+  </style>
+</head>
+<body>
+  <h1>Login with Everything</h1>
+  <p class="subtitle">You can log in with anything at Login with Everything.</p>
+
+  <!-- Board list -->
+  <div id="boardList">
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h2>Boards</h2>
+        <button onclick="showCreate()">+ New Board</button>
+      </div>
+      <div id="boards"><em>Loading...</em></div>
+    </div>
+  </div>
+
+  <!-- Create board -->
+  <div id="createView" class="card hidden">
+    <h2>Create a Board</h2>
+    <input id="boardName" placeholder="Board name, e.g. &quot;Water Enjoyers&quot;">
+    <input id="boardPredicate" placeholder="Predicate, e.g. &quot;Reddit karma > 1000&quot;">
+    <div class="row">
+      <select id="boardMethod">
+        <option value="api_key">API Key (paste a key/token)</option>
+        <option value="browser">Browser Session (TEE + cookies)</option>
+      </select>
+    </div>
+    <input id="boardSite" placeholder="Site or API, e.g. reddit.com or api.anthropic.com">
+    <textarea id="boardDesc" placeholder="Description (optional)"></textarea>
+    <div class="row">
+      <button onclick="createBoard()">Create</button>
+      <button class="secondary" onclick="showBoards()">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Single board view -->
+  <div id="boardView" class="hidden">
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <h2 id="bvName"></h2>
+          <div id="bvPredicate" class="predicate" style="margin-bottom:0.5rem;"></div>
+          <div id="bvDesc" style="color:#8b949e; font-size:0.85rem;"></div>
+        </div>
+        <button class="secondary" onclick="showBoards()">&larr; Back</button>
+      </div>
+    </div>
+
+    <!-- Login gate -->
+    <div id="loginGate" class="card">
+      <h2>Prove it to post</h2>
+      <div id="loginMethod"></div>
+      <div id="loginStatus"></div>
+    </div>
+
+    <!-- Post form (shown after auth) -->
+    <div id="postForm" class="card hidden">
+      <div id="authBar" class="auth-bar"></div>
+      <textarea id="postBody" placeholder="Write something..."></textarea>
+      <label style="display:flex; align-items:center; gap:0.4rem; font-size:0.85rem; color:#888; margin-bottom:0.5rem; cursor:pointer;">
+        <input type="checkbox" id="membersOnly" style="width:auto; margin:0;"> Members only
+      </label>
+      <button onclick="submitPost()" style="width:100%;">Post</button>
+    </div>
+
+    <!-- Posts -->
+    <div class="card">
+      <h2>Posts</h2>
+      <div id="posts"><em>No posts yet</em></div>
+    </div>
+  </div>
+
+  <script>
+    let currentBoard = null
+    let sessionToken = null
+    let sessionIdentity = null
+    let sessionEvidence = null
+
+    // --- localStorage persistence ---
+    function getSavedSessions() {
+      try { return JSON.parse(localStorage.getItem('lwa-sessions') || '{}') } catch { return {} }
+    }
+    function saveSession(boardId, token, identity, evidence) {
+      const sessions = getSavedSessions()
+      sessions[boardId] = { token, identity, evidence, savedAt: Date.now() }
+      localStorage.setItem('lwa-sessions', JSON.stringify(sessions))
+    }
+    function clearSession(boardId) {
+      const sessions = getSavedSessions()
+      delete sessions[boardId]
+      localStorage.setItem('lwa-sessions', JSON.stringify(sessions))
+    }
+    function clearAllSessions() {
+      localStorage.removeItem('lwa-sessions')
+    }
+
+    // --- Board list ---
+    async function loadBoards() {
+      const res = await fetch('/api/boards')
+      const { boards } = await res.json()
+      const saved = getSavedSessions()
+      const el = document.getElementById('boards')
+      if (!boards.length) { el.innerHTML = '<em>No boards yet. Create one!</em>'; return }
+      el.innerHTML = boards.map(b => {
+        const s = saved[b.id]
+        const loggedIn = s ? `<span class="flair">logged in as ${esc(s.identity)}</span>` : ''
+        return `
+        <div class="board" onclick="openBoard('${b.id}')">
+          <h3>${esc(b.name)} ${loggedIn}</h3>
+          <span class="badge ${b.method}">${b.method === 'api_key' ? 'API Key' : 'Cookie'}</span>
+          <span class="predicate">${esc(b.predicate)}</span>
+          <div class="meta">${b.postCount} posts &middot; ${esc(b.site)}</div>
+        </div>`
+      }).join('')
+    }
+
+    function showBoards() {
+      document.getElementById('boardList').classList.remove('hidden')
+      document.getElementById('createView').classList.add('hidden')
+      document.getElementById('boardView').classList.add('hidden')
+      sessionToken = null
+      sessionIdentity = null
+      sessionEvidence = null
+      loadBoards()
+    }
+
+    function showCreate() {
+      document.getElementById('boardList').classList.add('hidden')
+      document.getElementById('createView').classList.remove('hidden')
+    }
+
+    async function createBoard() {
+      const body = {
+        name: document.getElementById('boardName').value,
+        predicate: document.getElementById('boardPredicate').value,
+        method: document.getElementById('boardMethod').value,
+        site: document.getElementById('boardSite').value,
+        description: document.getElementById('boardDesc').value
+      }
+      const res = await fetch('/api/boards', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      })
+      if (res.ok) showBoards()
+    }
+
+    // --- Single board ---
+    async function openBoard(id) {
+      const res = await fetch(`/api/boards/${id}`)
+      currentBoard = await res.json()
+
+      document.getElementById('boardList').classList.add('hidden')
+      document.getElementById('boardView').classList.remove('hidden')
+      document.getElementById('bvName').textContent = currentBoard.name
+      document.getElementById('bvPredicate').textContent = currentBoard.predicate
+      document.getElementById('bvDesc').textContent = currentBoard.description || ''
+
+      // Check for saved session
+      const saved = getSavedSessions()[id]
+      if (saved) {
+        activateSession(saved.token, saved.identity, saved.evidence)
+      } else {
+        sessionToken = null
+        document.getElementById('postForm').classList.add('hidden')
+        document.getElementById('loginGate').classList.remove('hidden')
+        renderLoginMethod()
+      }
+
+      loadPosts(id)
+    }
+
+    function activateSession(token, identity, evidence) {
+      sessionToken = token
+      sessionIdentity = identity
+      sessionEvidence = evidence
+      document.getElementById('loginGate').classList.add('hidden')
+      document.getElementById('postForm').classList.remove('hidden')
+      document.getElementById('authBar').innerHTML = `
+        <div>
+          <span class="identity">${esc(identity)}</span>
+          ${evidence ? `<span class="flair">${esc(evidence)}</span>` : ''}
+        </div>
+        <button class="danger" onclick="logout()" style="padding:0.3rem 0.6rem; font-size:0.8rem;">Log out</button>`
+    }
+
+    function logout() {
+      clearSession(currentBoard.id)
+      sessionToken = null
+      sessionIdentity = null
+      sessionEvidence = null
+      document.getElementById('postForm').classList.add('hidden')
+      document.getElementById('loginGate').classList.remove('hidden')
+      document.getElementById('loginStatus').innerHTML = ''
+      renderLoginMethod()
+    }
+
+    function renderLoginMethod() {
+      const lm = document.getElementById('loginMethod')
+      if (currentBoard.method === 'api_key') {
+        lm.innerHTML = `
+          <input id="apiKeyInput" type="password" placeholder="Paste your API key or token">
+          <button onclick="verifyApiKey()" style="width:100%;">Verify</button>`
+      } else {
+        lm.innerHTML = `
+          <p style="color:#8b949e; font-size:0.9rem; margin-bottom:0.5rem;">
+            Open DevTools &rarr; Application &rarr; Cookies &rarr; <code>${esc(currentBoard.site)}</code><br>
+            Copy the <code>${esc(defaultCookieName(currentBoard.site))}</code> cookie value and paste it below.
+          </p>
+          <input id="cookieInput" type="password" placeholder="Paste cookie value">
+          <input id="cookieName" value="${defaultCookieName(currentBoard.site)}" placeholder="Cookie name" style="font-family:monospace; font-size:0.85rem;">
+          <input id="cookieUser" placeholder="Username (optional — auto-detected if possible)">
+          <button onclick="verifyCookie()" style="width:100%;">Verify via TEE</button>`
+      }
+    }
+
+    async function verifyApiKey() {
+      const key = document.getElementById('apiKeyInput').value.trim()
+      if (!key) return
+      setStatus('wait', 'Verifying...')
+      const res = await fetch('/api/verify', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ boardId: currentBoard.id, apiKey: key })
+      })
+      const data = await res.json()
+      if (data.sessionToken) {
+        saveSession(currentBoard.id, data.sessionToken, data.identity, data.evidence)
+        activateSession(data.sessionToken, data.identity, data.evidence)
+        setStatus('ok', 'Verified!')
+      } else {
+        setStatus('err', data.error || 'Verification failed')
+      }
+    }
+
+    function defaultCookieName(site) {
+      if (site.includes('reddit')) return 'reddit_session'
+      if (site.includes('twitter') || site.includes('x.com')) return 'auth_token'
+      if (site.includes('github')) return 'user_session'
+      if (site.includes('amazon')) return 'session-id'
+      if (site.includes('nytimes')) return 'NYT-S'
+      return 'session'
+    }
+
+    async function verifyCookie() {
+      const cookieValue = document.getElementById('cookieInput').value.trim()
+      const cookieName = document.getElementById('cookieName').value.trim()
+      const username = document.getElementById('cookieUser').value.trim()
+      if (!cookieValue) { setStatus('err', 'Cookie value required'); return }
+      setStatus('wait', 'Injecting cookie into TEE browser and verifying...')
+      const res = await fetch('/api/verify-cookie', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ boardId: currentBoard.id, cookieName, cookieValue, username: username || 'anon', site: currentBoard.site })
+      })
+      const data = await res.json()
+      if (data.sessionToken) {
+        saveSession(currentBoard.id, data.sessionToken, data.identity, data.evidence)
+        activateSession(data.sessionToken, data.identity, data.evidence)
+        setStatus('ok', 'Verified!')
+      } else {
+        setStatus('err', data.error || 'Verification failed')
+      }
+    }
+
+    function setStatus(type, msg) {
+      const el = document.getElementById('loginStatus')
+      el.className = `status ${type}`
+      el.innerHTML = msg
+    }
+
+    // --- Posts ---
+    async function loadPosts(boardId) {
+      const id = boardId || currentBoard?.id
+      if (!id) return
+      const q = sessionToken ? `?session=${sessionToken}` : ''
+      const res = await fetch(`/api/boards/${id}/posts${q}`)
+      const { posts } = await res.json()
+      const el = document.getElementById('posts')
+      if (!posts.length) { el.innerHTML = '<em>No posts yet. Be the first!</em>'; return }
+      el.innerHTML = posts.map(p => {
+        if (p.redacted) return `
+          <div class="post">
+            <div class="post-header">
+              <span class="author">${esc(p.identity)}</span>
+              ${p.evidence ? `<span class="flair">${esc(p.evidence)}</span>` : ''}
+              <span class="flair" style="background:#e8d4f0; color:#7733bb;">members only</span>
+            </div>
+            <div class="body" style="color:#ccc; font-style:italic; user-select:none; filter:blur(4px);">This post is only visible to verified members.</div>
+            <div class="ts">${new Date(p.timestamp).toLocaleString()}</div>
+          </div>`
+        return `
+          <div class="post">
+            <div class="post-header">
+              <span class="author">${esc(p.identity)}</span>
+              ${p.evidence ? `<span class="flair">${esc(p.evidence)}</span>` : ''}
+              ${p.membersOnly ? `<span class="flair" style="background:#e8d4f0; color:#7733bb;">members only</span>` : ''}
+            </div>
+            <div class="body">${esc(p.message)}</div>
+            <div class="ts">${new Date(p.timestamp).toLocaleString()}</div>
+          </div>`
+      }).join('')
+    }
+
+    async function submitPost() {
+      const message = document.getElementById('postBody').value.trim()
+      if (!message || !sessionToken) return
+      const membersOnly = document.getElementById('membersOnly').checked
+      await fetch(`/api/boards/${currentBoard.id}/posts`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionToken, message, membersOnly })
+      })
+      document.getElementById('postBody').value = ''
+      document.getElementById('membersOnly').checked = false
+      loadPosts()
+    }
+
+    function esc(s) {
+      const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML
+    }
+
+    loadBoards()
+  </script>
+</body>
+</html>

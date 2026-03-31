@@ -5,3 +5,6 @@ test/output/
 workflow/output/
 DEPLOY.md
 paper
+node_modules
+app/node_modules
+app/node_modules
