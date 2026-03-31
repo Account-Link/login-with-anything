@@ -32,7 +32,10 @@ function setStatus(type, msg) {
 }
 
 async function ensurePermission(domain) {
-  const origins = [`https://*.${domain}/*`, `http://*.${domain}/*`]
+  const origins = [
+    `https://${domain}/*`, `http://${domain}/*`,
+    `https://*.${domain}/*`, `http://*.${domain}/*`
+  ]
   const has = await chrome.permissions.contains({ origins })
   if (has) return true
   return chrome.permissions.request({ origins })

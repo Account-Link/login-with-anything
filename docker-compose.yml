@@ -16,6 +16,9 @@ services:
       NEKO_MEMBER_PROVIDER: multiuser
       NEKO_MEMBER_MULTIUSER_USER_PASSWORD: proof
       NEKO_MEMBER_MULTIUSER_ADMIN_PASSWORD: proof_admin
+    ports:
+      - "8082:8080"
+      - "3002:3000"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 10s

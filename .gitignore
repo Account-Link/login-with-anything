@@ -4,7 +4,12 @@ cookies.json
 test/output/
 workflow/output/
 DEPLOY.md
-paper/
+paper/*.aux
+paper/*.bbl
+paper/*.blg
+paper/*.log
+paper/*.out
+paper/*.pdf
 node_modules
 deploy_key
 archive/
