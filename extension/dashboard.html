@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Login with Everything</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui; background: #fafafa; color: #333; }
+  .topbar { display: flex; align-items: center; justify-content: space-between; padding: 10px 20px; background: white; border-bottom: 1px solid #e5e5e5; }
+  .topbar h1 { font-size: 16px; color: #2255cc; }
+  .topbar .controls { display: flex; gap: 8px; align-items: center; font-size: 12px; }
+  .topbar input { padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px; font-family: monospace; width: 300px; }
+  .topbar button { padding: 4px 12px; border: none; border-radius: 4px; font-size: 12px; cursor: pointer; background: #2255cc; color: white; }
+  .topbar button:hover { background: #1a44aa; }
+  .topbar button.secondary { background: #eee; color: #333; }
+  .topbar .status { font-size: 11px; color: #999; }
+  .layout { display: flex; height: calc(100vh - 46px); }
+  .panel { flex: 1; display: flex; flex-direction: column; }
+  .panel iframe { flex: 1; border: none; }
+  .panel-header { padding: 6px 12px; background: #f5f5f5; border-bottom: 1px solid #e5e5e5; font-size: 12px; color: #666; display: flex; justify-content: space-between; align-items: center; }
+  .divider { width: 4px; background: #e5e5e5; cursor: col-resize; }
+  .inject-bar { padding: 8px 12px; background: #fff; border-bottom: 1px solid #e5e5e5; display: flex; gap: 6px; align-items: center; font-size: 12px; }
+  .inject-bar input { flex: 1; padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px; }
+  .inject-bar button { padding: 4px 10px; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; }
+  .inject-bar .btn-inject { background: #2255cc; color: white; }
+  .inject-bar .btn-nav { background: #eee; color: #333; }
+  #injectStatus { font-size: 11px; color: #999; }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>Login with Everything</h1>
+    <div class="controls">
+      <label style="color:#999">Forum:</label>
+      <input id="forumUrl" placeholder="https://your-tee-3003.dstack...">
+      <button id="saveUrl">Save</button>
+      <button class="secondary" id="openForum">Open in tab</button>
+      <span class="status" id="connStatus"></span>
+    </div>
+  </div>
+  <div class="inject-bar">
+    <input id="injectDomain" placeholder="reddit.com">
+    <button class="btn-inject" id="btnInject">Inject Cookies</button>
+    <button class="btn-nav" id="btnNav">Navigate</button>
+    <input id="navUrl" placeholder="https://www.reddit.com/api/me.json" style="width:250px;">
+    <button class="btn-nav" id="btnNavGo">Go</button>
+    <span id="injectStatus"></span>
+  </div>
+  <div class="layout">
+    <div class="panel" id="forumPanel">
+      <div class="panel-header">
+        <span>Forum</span>
+      </div>
+      <iframe id="forumFrame" src="about:blank"></iframe>
+    </div>
+    <div class="divider"></div>
+    <div class="panel" id="nekoPanel">
+      <div class="panel-header">
+        <span>TEE Browser</span>
+        <button style="font-size:11px;padding:2px 8px;border:1px solid #ddd;border-radius:3px;background:white;cursor:pointer" id="toggleNeko">Hide</button>
+      </div>
+      <iframe id="nekoFrame" src="about:blank"></iframe>
+    </div>
+  </div>
+  <script>
+    const $ = id => document.getElementById(id)
+
+    async function init() {
+      const { settings = {} } = await chrome.storage.local.get('settings')
+      $('forumUrl').value = settings.forumUrl || ''
+      if (settings.forumUrl) {
+        $('forumFrame').src = settings.forumUrl
+        $('connStatus').textContent = 'Connected'
+        $('connStatus').style.color = '#22c55e'
+      }
+      // Neko is on port 8080 of the same host, or 8082 locally
+      if (settings.forumUrl) {
+        try {
+          const u = new URL(settings.forumUrl)
+          const nekoPort = u.hostname === 'localhost' ? '8082' : '8080'
+          const nekoUrl = u.port === '3003'
+            ? settings.forumUrl.replace('-3003.', '-8080.').replace(':3003', `:${nekoPort}`)
+            : `${u.protocol}//${u.hostname}:${nekoPort}`
+          $('nekoFrame').src = nekoUrl
+        } catch {}
+      }
+      // Default inject domain from current tab
+      const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true })
+      if (tab?.url) {
+        try {
+          const domain = new URL(tab.url).hostname.replace(/^www\./, '')
+          if (!domain.startsWith('chrome')) $('injectDomain').value = domain
+        } catch {}
+      }
+    }
+
+    $('saveUrl').addEventListener('click', async () => {
+      const forumUrl = $('forumUrl').value.replace(/\/$/, '')
+      const { settings = {} } = await chrome.storage.local.get('settings')
+      settings.forumUrl = forumUrl
+      await chrome.storage.local.set({ settings })
+      $('forumFrame').src = forumUrl
+      $('connStatus').textContent = 'Saved'
+      $('connStatus').style.color = '#22c55e'
+    })
+
+    $('openForum').addEventListener('click', () => {
+      const url = $('forumUrl').value
+      if (url) chrome.tabs.create({ url })
+    })
+
+    $('btnInject').addEventListener('click', async () => {
+      const domain = $('injectDomain').value.trim()
+      if (!domain) return
+      $('injectStatus').textContent = 'Injecting...'
+      const { settings = {} } = await chrome.storage.local.get('settings')
+      const bridgeUrl = settings.teeUrl || settings.forumUrl?.replace(':3003', ':3002')?.replace('-3003.', '-3000.')
+      if (!bridgeUrl) { $('injectStatus').textContent = 'No bridge URL'; return }
+
+      const res = await chrome.runtime.sendMessage({ type: 'injectCookies', domain, bridgeUrl })
+      if (res?.error) {
+        $('injectStatus').textContent = res.error
+        $('injectStatus').style.color = '#ef4444'
+      } else {
+        $('injectStatus').textContent = `Injected ${res?.set || '?'} cookies`
+        $('injectStatus').style.color = '#22c55e'
+      }
+    })
+
+    $('btnNav').addEventListener('click', () => {
+      const domain = $('injectDomain').value.trim()
+      if (domain) $('navUrl').value = `https://${domain}`
+    })
+
+    $('btnNavGo').addEventListener('click', async () => {
+      const url = $('navUrl').value.trim()
+      if (!url) return
+      const { settings = {} } = await chrome.storage.local.get('settings')
+      const bridgeUrl = settings.teeUrl || settings.forumUrl?.replace(':3003', ':3002')?.replace('-3003.', '-3000.')
+      if (!bridgeUrl) return
+      await fetch(bridgeUrl + '/navigate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url })
+      })
+    })
+
+    $('toggleNeko').addEventListener('click', () => {
+      const panel = $('nekoPanel')
+      const btn = $('toggleNeko')
+      if (panel.style.display === 'none') {
+        panel.style.display = 'flex'
+        btn.textContent = 'Hide'
+      } else {
+        panel.style.display = 'none'
+        btn.textContent = 'Show Browser'
+      }
+    })
+
+    init()
+  </script>
+</body>
+</html>

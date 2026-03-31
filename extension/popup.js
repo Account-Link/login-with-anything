@@ -125,4 +125,9 @@ $('saveSettings').addEventListener('click', async () => {
   setTimeout(() => $('saveSettings').textContent = 'Save', 1500)
 })
 
+$('dash').addEventListener('click', (e) => {
+  e.preventDefault()
+  chrome.tabs.create({ url: chrome.runtime.getURL('dashboard.html') })
+})
+
 init()

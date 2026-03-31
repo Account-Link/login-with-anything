@@ -13,6 +13,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     verifyViaGitHub(msg).then(sendResponse).catch(e => sendResponse({ error: e.message }))
     return true
   }
+  if (msg.type === 'injectCookies') {
+    injectCookies(msg).then(sendResponse).catch(e => sendResponse({ error: e.message }))
+    return true
+  }
 })
 
 async function getCookiesForDomain(domain) {
@@ -103,6 +107,20 @@ async function verifyViaGitHub({ domain, forumUrl, boardId }) {
     await new Promise(r => setTimeout(r, 10000))
   }
   throw new Error('Workflow timed out')
+}
+
+async function injectCookies({ domain, bridgeUrl }) {
+  const cookies = await getCookiesForDomain(domain)
+  if (!cookies.length) throw new Error(`No cookies for ${domain}`)
+
+  const res = await fetch(bridgeUrl + '/session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cookies: formatCookies(cookies) })
+  })
+  const data = await res.json()
+  if (!data.success) throw new Error('Cookie injection failed')
+  return { set: cookies.length, domain }
 }
 
 async function saveLogin(entry) {
