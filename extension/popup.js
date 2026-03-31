@@ -1,206 +1,128 @@
-const $ = id => document.getElementById(id);
-
-let trackedSites = [];
-let currentDomain = null;
+const $ = id => document.getElementById(id)
+let currentDomain = null
 
 async function init() {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
   if (tab?.url) {
-    try { currentDomain = new URL(tab.url).hostname.replace(/^www\./, ''); } catch {}
+    try { currentDomain = new URL(tab.url).hostname.replace(/^www\./, '') } catch {}
   }
 
-  const stored = await chrome.storage.local.get('trackedSites');
-  trackedSites = stored.trackedSites || [];
-
-  render();
-
-  if (!currentDomain || currentDomain.startsWith('chrome') || trackedSites.some(s => s.domain === currentDomain)) {
-    $('add').disabled = true;
-    if (trackedSites.some(s => s.domain === currentDomain)) $('add').textContent = 'Already tracking';
+  // Show current site
+  const el = $('current')
+  if (currentDomain && !currentDomain.startsWith('chrome')) {
+    const res = await chrome.runtime.sendMessage({ type: 'getCookies', domain: currentDomain })
+    const count = Array.isArray(res) ? res.length : 0
+    el.innerHTML = `<div class="domain">${currentDomain}</div><div class="count">${count} cookies available</div>`
+    $('btnTee').disabled = count === 0
+    $('btnGh').disabled = count === 0
+  } else {
+    el.innerHTML = '<div class="domain" style="color:#999">Navigate to a site first</div>'
+    $('btnTee').disabled = true
+    $('btnGh').disabled = true
   }
+
+  loadSettings()
+  loadHistory()
 }
 
-function render() {
-  const container = $('sites');
-  container.innerHTML = '';
-  $('empty').style.display = trackedSites.length ? 'none' : 'block';
+function setStatus(type, msg) {
+  const el = $('status')
+  el.className = type
+  el.textContent = msg
+}
 
-  for (const site of trackedSites) {
-    const row = document.createElement('div');
-    row.className = 'site';
+$('btnTee').addEventListener('click', async () => {
+  if (!currentDomain) return
+  $('btnTee').disabled = true
+  setStatus('wait', 'Grabbing cookies and sending to TEE...')
 
-    const dot = document.createElement('div');
-    dot.className = `dot ${site.syncEnabled ? (site.status || 'pending') : 'tracking'}`;
+  const { settings } = await chrome.storage.local.get('settings')
+  const forumUrl = settings?.forumUrl
+  if (!forumUrl) { setStatus('err', 'Set forum URL in settings first'); $('btnTee').disabled = false; return }
 
-    const domain = document.createElement('div');
-    domain.className = 'domain';
-    domain.textContent = site.domain;
+  const res = await chrome.runtime.sendMessage({
+    type: 'verifyViaTEE', domain: currentDomain, forumUrl
+  })
 
-    const meta = document.createElement('div');
-    meta.className = 'meta';
-    meta.textContent = site.syncEnabled ? (site.lastUpload ? timeAgo(site.lastUpload) : 'not synced') : 'tracking only';
-
-    const syncBtn = document.createElement('button');
-    syncBtn.className = 'sync-toggle';
-    syncBtn.textContent = site.syncEnabled ? 'syncing' : 'sync off';
-    syncBtn.title = site.syncEnabled ? 'Syncing to TEE (click to stop)' : 'Tracking only (click to enable sync)';
-    syncBtn.style.fontSize = '11px';
-    syncBtn.onclick = () => toggleSync(site.domain, !site.syncEnabled);
-
-    const remove = document.createElement('button');
-    remove.textContent = '\u00d7';
-    remove.onclick = () => removeSite(site.domain);
-
-    row.append(dot, domain, meta, syncBtn, remove);
-    container.appendChild(row);
+  if (res?.error) {
+    setStatus('err', res.error)
+  } else {
+    setStatus('ok', `Verified: ${res.identity || 'success'}`)
   }
+  $('btnTee').disabled = false
+  loadHistory()
+})
+
+$('btnGh').addEventListener('click', async () => {
+  if (!currentDomain) return
+  $('btnGh').disabled = true
+  setStatus('wait', 'Dispatching GitHub Actions workflow...')
+
+  const { settings } = await chrome.storage.local.get('settings')
+  const forumUrl = settings?.forumUrl
+  if (!forumUrl) { setStatus('err', 'Set forum URL in settings first'); $('btnGh').disabled = false; return }
+
+  const res = await chrome.runtime.sendMessage({
+    type: 'verifyViaGitHub', domain: currentDomain, forumUrl
+  })
+
+  if (res?.error) {
+    setStatus('err', res.error)
+  } else {
+    setStatus('ok', `Dispatched! Run: ${res.runUrl || 'pending'}`)
+  }
+  $('btnGh').disabled = false
+  loadHistory()
+})
+
+async function loadHistory() {
+  const { loginHistory = [] } = await chrome.storage.local.get('loginHistory')
+  const el = $('history')
+  if (!loginHistory.length) { el.innerHTML = '<div style="color:#ccc; font-size:11px;">No logins yet</div>'; return }
+  el.innerHTML = loginHistory.slice(0, 10).map((h, i) => `
+    <div class="login-entry">
+      <span class="domain">${h.domain || '?'}</span>
+      <span class="meta">${h.identity || h.method || ''} · ${timeAgo(h.timestamp)}</span>
+      <span class="clear" data-idx="${i}">&times;</span>
+    </div>
+  `).join('')
+  el.querySelectorAll('.clear').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const { loginHistory = [] } = await chrome.storage.local.get('loginHistory')
+      loginHistory.splice(parseInt(btn.dataset.idx), 1)
+      await chrome.storage.local.set({ loginHistory })
+      loadHistory()
+    })
+  })
 }
 
 function timeAgo(ts) {
-  const sec = Math.floor((Date.now() - ts) / 1000);
-  if (sec < 60) return 'just now';
-  if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
-  if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`;
-  return `${Math.floor(sec / 86400)}d ago`;
+  const sec = Math.floor((Date.now() - ts) / 1000)
+  if (sec < 60) return 'just now'
+  if (sec < 3600) return `${Math.floor(sec / 60)}m ago`
+  if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`
+  return `${Math.floor(sec / 86400)}d ago`
 }
 
-async function addSite() {
-  if (!currentDomain) return;
-  $('add').disabled = true;
-  $('status').textContent = 'Requesting permission...';
-
-  const origins = [`https://*.${currentDomain}/*`, `http://*.${currentDomain}/*`];
-  if (currentDomain === 'youtube.com') origins.push('https://*.google.com/*', 'http://*.google.com/*');
-  const granted = await chrome.permissions.request({ origins });
-  if (!granted) {
-    $('status').textContent = 'Permission denied';
-    $('add').disabled = false;
-    return;
-  }
-
-  trackedSites.push({ domain: currentDomain, lastUpload: null, status: 'tracking', syncEnabled: false });
-  await chrome.storage.local.set({ trackedSites });
-  render();
-
-  $('status').textContent = 'Tracking locally.';
-  $('status').style.color = '#22c55e';
-  $('add').textContent = 'Already tracking';
-
-  const { ownerToken } = await chrome.storage.local.get('ownerToken');
-  if (ownerToken) {
-    const banner = $('consent-banner');
-    banner.style.display = 'block';
-    $('consent-domain').textContent = currentDomain;
-    $('consent-yes').onclick = async () => {
-      banner.style.display = 'none';
-      await toggleSync(currentDomain, true);
-    };
-    $('consent-no').onclick = () => {
-      banner.style.display = 'none';
-      $('status').textContent = 'Tracking locally only.';
-      $('status').style.color = '#22c55e';
-    };
-  }
+async function loadSettings() {
+  const { settings = {} } = await chrome.storage.local.get('settings')
+  $('forumUrl').value = settings.forumUrl || ''
+  $('teeUrl').value = settings.teeUrl || ''
+  $('ghToken').value = settings.ghToken || ''
+  $('ghRepo').value = settings.ghRepo || ''
 }
 
-async function toggleSync(domain, enabled) {
-  $('status').textContent = enabled ? 'Enabling sync...' : 'Disabling sync...';
-  $('status').style.color = '#666';
-  const res = await chrome.runtime.sendMessage({ type: 'setSyncEnabled', domain, enabled });
-  if (res?.error) {
-    $('status').textContent = `Error: ${res.error}`;
-    $('status').style.color = '#ef4444';
-  } else {
-    $('status').textContent = enabled ? 'Sync enabled' : 'Sync disabled';
-    $('status').style.color = '#22c55e';
-    const stored = await chrome.storage.local.get('trackedSites');
-    trackedSites = stored.trackedSites || trackedSites;
-    render();
-  }
-}
-
-async function removeSite(domain) {
-  trackedSites = trackedSites.filter(s => s.domain !== domain);
-  await chrome.storage.local.set({ trackedSites });
-  render();
-  if (domain === currentDomain) {
-    $('add').disabled = false;
-    $('add').textContent = 'Track this site';
-  }
-}
-
-async function updateSiteStatus(domain, status) {
-  const idx = trackedSites.findIndex(s => s.domain === domain);
-  if (idx !== -1) {
-    trackedSites[idx].status = status;
-    await chrome.storage.local.set({ trackedSites });
-    render();
-  }
-}
-
-$('add').addEventListener('click', addSite);
-$('dash').addEventListener('click', (e) => {
-  e.preventDefault();
-  chrome.tabs.create({ url: chrome.runtime.getURL('dashboard.html') });
-});
-
-async function loadAccount() {
-  const { ownerToken, accountEmail } = await chrome.storage.local.get(['ownerToken', 'accountEmail']);
-  const info = $('account-info');
-  const emailInput = $('email-input');
-  const loginBtn = $('login-btn');
-
-  if (accountEmail) {
-    info.textContent = accountEmail;
-    emailInput.style.display = 'none';
-    loginBtn.style.display = 'none';
-  } else if (ownerToken) {
-    try {
-      const payload = JSON.parse(atob(ownerToken.split('.')[1]));
-      info.textContent = payload.tenant_id?.slice(0, 12) + '... (no email linked)';
-    } catch { info.textContent = 'Anonymous'; }
-    emailInput.style.display = 'block';
-    loginBtn.style.display = 'block';
-  } else {
-    info.textContent = 'Not logged in';
-    emailInput.style.display = 'block';
-    loginBtn.style.display = 'block';
-  }
-}
-
-$('login-btn').addEventListener('click', async () => {
-  const email = $('email-input').value.trim();
-  if (!email) return;
-  $('login-btn').disabled = true;
-  $('login-btn').textContent = 'Sending...';
-  try {
-    const ORCH = 'https://oauth3-stage.monerolink.com';
-    // Try signup first (idempotent if email exists)
-    const signupRes = await fetch(`${ORCH}/signup`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email })
-    });
-    const data = await signupRes.json();
-    if (!signupRes.ok) throw new Error(data.error);
-    if (data.tee_token) {
-      await chrome.storage.local.set({
-        ownerToken: data.tee_token,
-        accountEmail: email,
-        apiKey: data.api_key
-      });
-      $('login-btn').textContent = 'Linked!';
-      $('login-btn').style.background = '#22c55e';
-      $('account-info').textContent = email;
-      $('email-input').style.display = 'none';
-      // Re-sync cookies with new token
-      chrome.runtime.sendMessage({ type: 'syncAll' });
+$('saveSettings').addEventListener('click', async () => {
+  await chrome.storage.local.set({
+    settings: {
+      forumUrl: $('forumUrl').value.replace(/\/$/, ''),
+      teeUrl: $('teeUrl').value.replace(/\/$/, ''),
+      ghToken: $('ghToken').value,
+      ghRepo: $('ghRepo').value
     }
-  } catch (e) {
-    $('login-btn').textContent = e.message;
-    $('login-btn').style.background = '#ef4444';
-  }
-});
+  })
+  $('saveSettings').textContent = 'Saved!'
+  setTimeout(() => $('saveSettings').textContent = 'Save', 1500)
+})
 
-init();
-loadAccount();
+init()

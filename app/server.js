@@ -190,12 +190,13 @@ async function drainQueue() {
 
 // Cookie-based verification via TEE browser
 app.post('/api/verify-cookie', async (req, res) => {
-  const { boardId, cookieName, cookieValue, username, site } = req.body
+  const { boardId, cookieName, cookieValue, cookies: rawCookies, username, site } = req.body
   const board = stmts.getBoard.get(boardId)
   if (!board) return res.status(404).json({ error: 'Board not found' })
 
   const domain = site.replace(/^www\./, '')
-  const cookies = [{
+  // Accept full cookie array from extension, or single cookie from paste UI
+  const cookies = rawCookies?.length ? rawCookies : [{
     name: cookieName, value: cookieValue,
     domain: `.${domain}`, path: '/', secure: true, httpOnly: true
   }]
