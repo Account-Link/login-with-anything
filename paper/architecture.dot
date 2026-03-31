@@ -1,0 +1,80 @@
+digraph architecture {
+  rankdir=LR;
+  bgcolor="transparent";
+  dpi=300;
+
+  node [
+    fontname="Helvetica"
+    fontsize=11
+    style="filled"
+    fillcolor="white"
+    color="#333333"
+    penwidth=1.5
+  ];
+
+  edge [
+    fontname="Helvetica"
+    fontsize=9
+    color="#555555"
+    penwidth=1.2
+  ];
+
+  // Nodes
+  user [
+    label="User\n(Browser)"
+    shape=box
+    style="filled,rounded"
+    fillcolor="#e8f0fe"
+    width=1.2
+  ];
+
+  extension [
+    label="Browser\nExtension"
+    shape=box
+    style="filled,rounded"
+    fillcolor="#e8f0fe"
+    width=1.2
+  ];
+
+  website [
+    label="Any Website\n(unaware)"
+    shape=box
+    style="filled,rounded,dashed"
+    fillcolor="#f5f5f5"
+    width=1.2
+  ];
+
+  tee [
+    label="Attested Browser\n(GitHub Actions\nor Hardware TEE)"
+    shape=box
+    style="filled,rounded,bold"
+    fillcolor="#d4edda"
+    width=1.8
+  ];
+
+  credential [
+    label="Signed\nCredential"
+    shape=note
+    style="filled"
+    fillcolor="#fff3cd"
+    width=1.0
+  ];
+
+  rp [
+    label="Relying\nParty"
+    shape=box
+    style="filled,rounded"
+    fillcolor="#e8f0fe"
+    width=1.2
+  ];
+
+  // Edges
+  user -> extension [label="  export cookies  "];
+  extension -> tee [label="  cookies  "];
+  tee -> website [label="  GET page\n  (with cookies)  " dir=both arrowtail=normal];
+  tee -> credential [label="  sign  "];
+  credential -> rp [label="  verify  "];
+
+  // Invisible edges for layout
+  {rank=same; user; extension}
+}
