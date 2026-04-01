@@ -1,28 +1,35 @@
 services:
-  browser:
+  test-chrome:
     build:
       context: .
-      dockerfile: Dockerfile
-    container_name: shave-test
+      dockerfile_inline: |
+        FROM ghcr.io/m1k1o/neko/chromium:latest
+        RUN apt-get update -qq && apt-get install -y -qq scrot && rm -rf /var/lib/apt/lists/*
+        RUN mkdir -p /etc/chromium/policies/managed
+        COPY policies.json /etc/chromium/policies/managed/policies.json
+        COPY chromium-test.conf /etc/neko/supervisord/chromium.conf
+    container_name: test-chrome
     shm_size: 2gb
     cap_add:
       - SYS_ADMIN
     ports:
-      - "8080:8080"
-      - "56000:56000"
-      - "9222:9222"
-      - "3456:3456"
-    environment:
-      NEKO_DESKTOP_SCREEN: "1280x800@30"
-      NEKO_WEBRTC_ICELITE: "true"
-      NEKO_WEBRTC_TCPMUX: "56000"
-      NEKO_NAT1TO1: "127.0.0.1"
-      NEKO_WEBRTC_ICESERVERS_FRONTEND: ""
-      NEKO_WEBRTC_ICESERVERS_BACKEND: ""
-      NEKO_MEMBER_PROVIDER: noauth
+      - "8083:8080"
+      - "9223:9222"
     volumes:
-      - ../:/usr/share/chromium/extensions/shave-src:ro
-      - chrome-profile:/home/neko/.config/chromium
+      - ../extension:/usr/share/chromium/extensions/lwa
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - default
+      - login-with-anything_default
+    environment:
+      NEKO_DESKTOP_SCREEN: "1280x720@30"
+      NEKO_WEBRTC_ICELITE: "true"
+      NEKO_NAT1TO1: "127.0.0.1"
+      NEKO_MEMBER_PROVIDER: multiuser
+      NEKO_MEMBER_MULTIUSER_USER_PASSWORD: test
+      NEKO_MEMBER_MULTIUSER_ADMIN_PASSWORD: test
 
-volumes:
-  chrome-profile:
+networks:
+  login-with-anything_default:
+    external: true
