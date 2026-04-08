@@ -38,6 +38,8 @@ services:
     networks:
       lwa-net:
         ipv4_address: 17.100.0.3
+    ports:
+      - "3000:3000"
     shm_size: 2gb
     cap_add:
       - SYS_ADMIN
@@ -59,7 +61,7 @@ services:
       timeout: 5s
 
   app:
-    image: ghcr.io/amiller/login-with-anything-app@sha256:68f7afa8e7ca02958f6abbc2f707d4fafc01f8497ed6d8b50415e606ce1fe7f6
+    image: ghcr.io/amiller/login-with-anything-app@sha256:4580b2c11b1191bdf404affaf64ae6269ab84bdf1f03195aae1f26ade508d30c
     depends_on:
       browser:
         condition: service_healthy

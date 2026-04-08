@@ -196,9 +196,15 @@ async function drainQueue() {
 }
 
 // Cookie-based verification via TEE browser
+const findBoardBySite = db.prepare(`SELECT * FROM boards WHERE site LIKE ? LIMIT 1`)
+
 app.post('/api/verify-cookie', async (req, res) => {
   const { boardId, cookieName, cookieValue, cookies: rawCookies, username, site } = req.body
-  const board = stmts.getBoard.get(boardId)
+  let board = boardId ? stmts.getBoard.get(boardId) : null
+  if (!board && site) {
+    const domainKey = site.replace(/^www\./, '').split('/')[0]
+    board = findBoardBySite.get(`%${domainKey}%`)
+  }
   if (!board) return res.status(404).json({ error: 'Board not found' })
 
   const domain = site.replace(/^www\./, '')

@@ -83,20 +83,26 @@ preflight_code=$(echo "$preflight" | head -1 | awk '{print $2}')
   || check "preflight 2xx" true "false ($preflight_code)"
 
 echo
-echo "[5] /api/verify-cookie reachable (extension's primary endpoint)"
-board=$(curl -sk "$BASE/api/boards" | grep -o '"id":"board-[^"]*"' | head -1 | cut -d'"' -f4)
+echo "[5] /api/verify-cookie reachable WITHOUT boardId (extension's exact payload)"
+# popup.js does NOT send boardId — server must look up board by site instead.
 vc_code=$(curl -sk -X POST -H 'Origin: chrome-extension://abc' -H 'Content-Type: application/json' \
-  -d "{\"boardId\":\"$board\",\"cookieName\":\"_all\",\"cookieValue\":\"_all\",\"cookies\":[],\"site\":\"reddit.com\"}" \
+  -d '{"cookieName":"_all","cookieValue":"_all","cookies":[],"site":"reddit.com"}' \
   -o /dev/null -w '%{http_code}' "$BASE/api/verify-cookie")
-# Empty-cookie call expected to fail at the verification step (200 with error body
-# or 4xx) — what matters is it reached the handler, not 503 / connection refused.
+# Empty-cookie call expected to fail at the verification step (200 with error body)
+# — what matters is it reached the handler, not 404 "Board not found" / 503.
 case "$vc_code" in
-  200|400|401|404) check "verify-cookie reachable" true true ;;
-  *) check "verify-cookie reachable" true "false ($vc_code)" ;;
+  200) check "verify-cookie no-boardId reachable" true true ;;
+  *) check "verify-cookie no-boardId reachable" true "false ($vc_code)" ;;
 esac
 
 echo
-echo "[6] Inside CVM (requires SSH key)"
+echo "[6] Bridge URL exposed on public gateway (port 3000)"
+BRIDGE=https://${APP_ID}-3000.${CLUSTER}.phala.network
+b_code=$(curl -sk -o /dev/null -w '%{http_code}' --connect-timeout 8 "$BRIDGE/health")
+[[ "$b_code" == "200" ]] && check "bridge /health" 200 200 || check "bridge /health" 200 "$b_code"
+
+echo
+echo "[7] Inside CVM (requires SSH key)"
 if [[ -f "$KEY" ]]; then
   ssh_out=$(phala ssh "$CVM_NAME" -- -i "$KEY" \
     -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
