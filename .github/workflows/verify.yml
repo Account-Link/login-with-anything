@@ -27,13 +27,13 @@ jobs:
     steps:
       - name: Pull cookies from gist
         env:
-          # Needs a fine-grained PAT with "Gists: Read-only" scope.
-          # See deploy/NOTES.md "GitHub Actions verify mode" for setup.
-          GH_TOKEN: ${{ secrets.LWA_GIST_TOKEN }}
+          # Reuses the existing GH_PAT secret (also used by twitter-like.yml).
+          # Needs gist scope to read the user's private session gist.
+          GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
           if [ -z "$GH_TOKEN" ]; then
-            echo "::error::LWA_GIST_TOKEN secret is not set on this repo."
-            echo "Add a fine-grained PAT with 'Gists: Read-only' scope as LWA_GIST_TOKEN."
+            echo "::error::GH_PAT secret is not set on this repo."
+            echo "Add a PAT with 'gist' scope as the GH_PAT repo secret."
             exit 1
           fi
           gh api gists/${{ inputs.gist_id }} > /tmp/gist.json
