@@ -29,13 +29,17 @@ jobs:
         env:
           # Reuses the existing GH_PAT secret (also used by twitter-like.yml).
           # Needs gist scope to read the user's private session gist.
-          GH_TOKEN: ${{ secrets.GH_PAT }}
+          GH_TOKEN_RAW: ${{ secrets.GH_PAT }}
         run: |
-          if [ -z "$GH_TOKEN" ]; then
+          if [ -z "$GH_TOKEN_RAW" ]; then
             echo "::error::GH_PAT secret is not set on this repo."
             echo "Add a PAT with 'gist' scope as the GH_PAT repo secret."
             exit 1
           fi
+          # Strip whitespace/newlines that crept in when the secret was set —
+          # otherwise Go's http client rejects the Authorization header.
+          GH_TOKEN=$(printf '%s' "$GH_TOKEN_RAW" | tr -d '\r\n\t ')
+          export GH_TOKEN
           gh api gists/${{ inputs.gist_id }} > /tmp/gist.json
           jq -r '.files["session.json"].content' /tmp/gist.json > /tmp/cookies.json
           n=$(jq 'length' /tmp/cookies.json)
