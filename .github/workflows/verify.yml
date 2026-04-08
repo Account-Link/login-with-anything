@@ -1,0 +1,132 @@
+name: Verify Login
+
+# Generic cookie-verification workflow dispatched by the Login with
+# Everything browser extension. The extension uploads cookies to a private
+# gist, then dispatches this workflow with the gist id and target domain.
+# We pull the cookies, run the same TEE browser image we use on the Phala
+# CVM, navigate to the site, and produce an attested screenshot artifact.
+
+on:
+  workflow_dispatch:
+    inputs:
+      domain:
+        description: 'Site to verify (e.g. reddit.com)'
+        required: true
+      gist_id:
+        description: 'Gist ID containing session.json with cookies'
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pull cookies from gist
+        env:
+          # Needs a fine-grained PAT with "Gists: Read-only" scope.
+          # See deploy/NOTES.md "GitHub Actions verify mode" for setup.
+          GH_TOKEN: ${{ secrets.LWA_GIST_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::LWA_GIST_TOKEN secret is not set on this repo."
+            echo "Add a fine-grained PAT with 'Gists: Read-only' scope as LWA_GIST_TOKEN."
+            exit 1
+          fi
+          gh api gists/${{ inputs.gist_id }} > /tmp/gist.json
+          jq -r '.files["session.json"].content' /tmp/gist.json > /tmp/cookies.json
+          n=$(jq 'length' /tmp/cookies.json)
+          echo "Pulled $n cookies for ${{ inputs.domain }}"
+          if [ "$n" = "0" ]; then echo "::error::gist has no cookies"; exit 1; fi
+
+      - name: Start TEE browser container
+        run: |
+          docker run -d --name lwa-browser \
+            --shm-size=2gb \
+            --cap-add=SYS_ADMIN \
+            -p 3000:3000 \
+            ghcr.io/amiller/login-with-anything-browser@sha256:9a228ac477eeb50a316291c464934a9d4426872b09eb061e43543ff6755be93e
+          for i in $(seq 1 30); do
+            if curl -fs http://localhost:3000/health >/dev/null 2>&1; then
+              echo "Bridge ready after ${i}s"; break
+            fi
+            sleep 2
+          done
+          curl -fs http://localhost:3000/health || (docker logs lwa-browser; exit 1)
+
+      - name: Determine target URL
+        id: target
+        run: |
+          DOMAIN="${{ inputs.domain }}"
+          case "$DOMAIN" in
+            *reddit*)              URL="https://www.reddit.com/" ;;
+            *nytimes*|*wordle*)    URL="https://www.nytimes.com/games/wordle" ;;
+            *twitter*|*x.com*)     URL="https://x.com/home" ;;
+            *github.com*)          URL="https://github.com/" ;;
+            *anthropic*)           URL="https://console.anthropic.com/" ;;
+            *)                     URL="https://${DOMAIN}/" ;;
+          esac
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "Target: $URL"
+
+      - name: Inject cookies, navigate, capture
+        run: |
+          mkdir -p proof
+
+          # Bridge /session expects {"cookies": [...]}
+          jq '{cookies: .}' /tmp/cookies.json > /tmp/session.json
+          curl -fsS -X POST http://localhost:3000/session \
+            -H "Content-Type: application/json" -d @/tmp/session.json
+
+          # Navigate
+          curl -fsS -X POST http://localhost:3000/navigate \
+            -H "Content-Type: application/json" \
+            -d "{\"url\":\"${{ steps.target.outputs.url }}\"}"
+          sleep 6
+
+          # Screenshot
+          curl -fsS http://localhost:3000/screenshot -o proof/screenshot.png
+          ls -la proof/screenshot.png
+
+          # Capture page state for the certificate
+          curl -fsS -X POST http://localhost:3000/capture > proof/capture.json || echo '{}' > proof/capture.json
+
+          # Sanity-check: detect login pages
+          TITLE=$(jq -r '.certificate.pageInfo.title // ""' proof/capture.json)
+          BODY=$(jq -r '.certificate.pageInfo.bodyText // ""' proof/capture.json | head -c 500)
+          echo "Title: $TITLE"
+          if echo "$TITLE" | grep -iq "log in\|sign in"; then
+            echo "::warning::Page title looks like a login page — cookie may not have authenticated"
+          fi
+
+          cat > proof/certificate.json <<EOF
+          {
+            "type": "login-with-anything-proof",
+            "domain": "${{ inputs.domain }}",
+            "url": "${{ steps.target.outputs.url }}",
+            "page_title": $(jq -Rs . <<<"$TITLE"),
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "github_run_id": "${{ github.run_id }}",
+            "github_run_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          }
+          EOF
+          cat proof/certificate.json
+
+      - name: Upload proof artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lwa-proof-${{ inputs.domain }}-${{ github.run_id }}
+          path: proof/
+          retention-days: 90
+
+      - name: Attest screenshot
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: proof/screenshot.png
+
+      - name: Cleanup
+        if: always()
+        run: docker rm -f lwa-browser || true
