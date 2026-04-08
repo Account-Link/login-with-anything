@@ -46,12 +46,52 @@ jobs:
           echo "Pulled $n cookies for ${{ inputs.domain }}"
           if [ "$n" = "0" ]; then echo "::error::gist has no cookies"; exit 1; fi
 
+      - name: Start OpenVPN + SOCKS5 sidecar (residential egress)
+        id: vpn
+        env:
+          OPENVPN_USER: ${{ secrets.OPENVPN_USER }}
+          OPENVPN_PASS: ${{ secrets.OPENVPN_PASS }}
+          OVPN_CONFIG_BASE64: ${{ secrets.OVPN_CONFIG_BASE64 }}
+        run: |
+          docker network create lwa-net 2>/dev/null || true
+          if [ -z "$OPENVPN_USER" ] || [ -z "$OVPN_CONFIG_BASE64" ]; then
+            echo "::warning::VPN secrets not set; egress will be the github runner IP."
+            echo "::warning::Sites with strong anti-bot (reddit, x.com) will block."
+            echo "proxy_url=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Same image we pin on the Phala CVM (deploy/docker-compose.phala.yml)
+          docker run -d --name lwa-vpn \
+            --network lwa-net \
+            --privileged \
+            --cap-add NET_ADMIN \
+            --device /dev/net/tun \
+            -e SOCKS5_PORT=1080 \
+            -e DAEMON_MODE=true \
+            -e OPENVPN_USER -e OPENVPN_PASS -e OVPN_CONFIG_BASE64 \
+            ghcr.io/amiller/openvpn-socks5@sha256:287ca89cb223f70a607ea24f5bf7fc99d6484c5630ff43585a316a8342c3a620
+          ip=""
+          for i in $(seq 1 45); do
+            ip=$(docker exec lwa-vpn curl -s --max-time 5 https://api.ipify.org 2>/dev/null || true)
+            if [ -n "$ip" ]; then break; fi
+            sleep 2
+          done
+          if [ -z "$ip" ]; then
+            echo "::error::VPN failed to come up after 90s"
+            docker logs lwa-vpn | tail -50
+            exit 1
+          fi
+          echo "VPN egress IP: $ip"
+          echo "proxy_url=socks5://lwa-vpn:1080" >> "$GITHUB_OUTPUT"
+
       - name: Start TEE browser container
         run: |
           docker run -d --name lwa-browser \
+            --network lwa-net \
             --shm-size=2gb \
             --cap-add=SYS_ADMIN \
             -p 3000:3000 \
+            -e PROXY_URL="${{ steps.vpn.outputs.proxy_url }}" \
             ghcr.io/amiller/login-with-anything-browser@sha256:9a228ac477eeb50a316291c464934a9d4426872b09eb061e43543ff6755be93e
           for i in $(seq 1 30); do
             if curl -fs http://localhost:3000/health >/dev/null 2>&1; then
@@ -133,4 +173,6 @@ jobs:
 
       - name: Cleanup
         if: always()
-        run: docker rm -f lwa-browser || true
+        run: |
+          docker rm -f lwa-browser 2>/dev/null || true
+          docker rm -f lwa-vpn 2>/dev/null || true
