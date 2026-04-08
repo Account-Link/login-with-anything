@@ -132,6 +132,62 @@ Checks: gateway reachable, boards API populated, verify-tee returns 200 with
 screenshot + sessionId, ANTHROPIC_API_KEY present in container, forum.db on
 disk, VPN egress in residential range. Exit code reflects pass/fail.
 
+## GitHub Actions verify mode (extension mode 4)
+
+The extension's `Verify via GitHub Actions` button uploads cookies to a
+private gist and dispatches `.github/workflows/verify.yml` with `domain`
+and `gist_id` inputs. The workflow:
+
+1. Pulls the gist via `gh api gists/<id>` (auth: `secrets.GH_PAT`, gist scope)
+2. Runs the same TEE browser image we pin on the CVM
+   (`ghcr.io/amiller/login-with-anything-browser@sha256:9a228ac4...`)
+3. Injects cookies → navigates → screenshots → uploads as
+   `actions/upload-artifact` and signs with `actions/attest-build-provenance`
+
+**Where it lives:** `Account-Link/login-with-anything` (the upstream org repo).
+The workflow file is in `.github/workflows/verify.yml`. The `amiller/login-with-anything`
+fork does NOT have this workflow — push there too if your extension's
+`settings.ghRepo` targets the fork instead.
+
+**Required repo secret:** `GH_PAT` (already set on Account-Link, used by
+`twitter-like.yml` too). Must be a PAT with `gist` scope. **Beware of
+trailing whitespace** when setting via the GitHub web UI — Go's HTTP client
+rejects auth headers with `\r\n`. The workflow strips whitespace before
+exporting, so it's robust to that, but a clean re-set is preferred.
+
+**Reddit / Twitter / X.com caveat — datacenter IP blocking.** GitHub
+Actions runners egress from Azure IP ranges, and reddit explicitly blocks
+them ("You've been blocked by network security. To continue, log in to your
+Reddit account or use your developer token"). Verified 2026-04-08: a
+real run with a test gist + reddit.com produced a real screenshot, but of
+the block page, not the logged-in content. This is the reason the TEE
+path on the CVM has the Mullvad sidecar — github runners don't.
+
+What works on github mode:
+- `api.anthropic.com`, `api.github.com` (API endpoints, no anti-bot)
+- Most non-anti-bot sites
+
+What's likely broken on github mode:
+- reddit.com, x.com / twitter.com, anything with Cloudflare anti-bot
+- For these, use the TEE mode on the CVM instead
+
+To make github mode work for blocked sites, you'd need to install an
+openvpn or wireguard client on the runner with a residential exit. Real
+work, not done.
+
+**To dispatch manually for testing:**
+```bash
+# Create a test gist (file MUST be named session.json)
+cat > /tmp/session.json <<'EOF'
+[{"name":"test","value":"x","domain":".reddit.com","path":"/","secure":true,"httpOnly":true}]
+EOF
+GIST_ID=$(gh gist create /tmp/session.json --desc 'lwa-test' 2>&1 | grep -oE '[a-f0-9]{20,}')
+gh workflow run verify.yml -R Account-Link/login-with-anything \
+  -f domain=reddit.com -f gist_id=$GIST_ID
+gh run list -R Account-Link/login-with-anything -w verify.yml -L 1
+gh gist delete $GIST_ID  # cleanup
+```
+
 ## Footguns (real ones encountered during this deploy)
 
 ### `phala ssh` syntax

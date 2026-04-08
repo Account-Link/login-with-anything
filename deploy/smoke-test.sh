@@ -102,7 +102,20 @@ b_code=$(curl -sk -o /dev/null -w '%{http_code}' --connect-timeout 8 "$BRIDGE/he
 [[ "$b_code" == "200" ]] && check "bridge /health" 200 200 || check "bridge /health" 200 "$b_code"
 
 echo
-echo "[7] Inside CVM (requires SSH key)"
+echo "[7] GitHub Actions verify.yml workflow registered (extension mode 4)"
+GH_REPO=${GH_REPO:-Account-Link/login-with-anything}
+if command -v gh >/dev/null 2>&1; then
+  vy_status=$(gh api "repos/${GH_REPO}/actions/workflows/verify.yml" --jq '.state' 2>/dev/null || echo missing)
+  case "$vy_status" in
+    active) check "verify.yml registered on $GH_REPO" active "$vy_status" ;;
+    *)      check "verify.yml registered on $GH_REPO" active "$vy_status" ;;
+  esac
+else
+  echo "  SKIP: gh CLI not installed"
+fi
+
+echo
+echo "[8] Inside CVM (requires SSH key)"
 if [[ -f "$KEY" ]]; then
   ssh_out=$(phala ssh "$CVM_NAME" -- -i "$KEY" \
     -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
