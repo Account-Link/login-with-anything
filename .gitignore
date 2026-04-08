@@ -12,4 +12,5 @@ paper/*.out
 paper/main.pdf
 node_modules
 deploy_key
+deploy/secrets.env
 archive/

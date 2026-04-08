@@ -32,7 +32,7 @@ services:
       OVPN_CONFIG_BASE64: ${OVPN_CONFIG_BASE64}
 
   browser:
-    image: ghcr.io/amiller/login-with-anything-browser:latest
+    image: ghcr.io/amiller/login-with-anything-browser@sha256:9a228ac477eeb50a316291c464934a9d4426872b09eb061e43543ff6755be93e
     depends_on:
       - vpn
     networks:
@@ -59,7 +59,7 @@ services:
       timeout: 5s
 
   app:
-    image: ghcr.io/amiller/login-with-anything-app:latest
+    image: ghcr.io/amiller/login-with-anything-app@sha256:5ce5e1e5d6d17db43c1ee12c4147c70d93ed72ec4f837f99033b8697ba259e32
     depends_on:
       browser:
         condition: service_healthy
