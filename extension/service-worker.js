@@ -93,20 +93,29 @@ async function verifyViaGitHub({ domain, forumUrl, boardId }) {
   })
   if (!dispatchRes.ok) throw new Error(`Workflow dispatch failed: ${dispatchRes.status}`)
 
-  // Poll for completion
-  await new Promise(r => setTimeout(r, 5000))
-  for (let i = 0; i < 30; i++) {
-    const runsRes = await fetch(`https://api.github.com/repos/${repo}/actions/runs?per_page=1`, { headers })
+  // Find the new run id (workflow_dispatch returns 204 with no body, so poll briefly)
+  let runId = null
+  for (let i = 0; i < 6; i++) {
+    await new Promise(r => setTimeout(r, 1500))
+    const runsRes = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/verify.yml/runs?per_page=1&event=workflow_dispatch`, { headers })
     const runs = await runsRes.json()
     const run = runs.workflow_runs?.[0]
-    if (run?.conclusion === 'success') {
-      await saveLogin({ domain, method: 'github', runUrl: run.html_url })
-      return { dispatched: true, runUrl: run.html_url, domain }
+    // Pick a run that was created in the last 30s — handles concurrent dispatches better than per_page=1 alone
+    if (run && (Date.now() - new Date(run.created_at).getTime()) < 30000) {
+      runId = run.id
+      break
     }
-    if (run?.conclusion === 'failure') throw new Error('Workflow failed')
-    await new Promise(r => setTimeout(r, 10000))
   }
-  throw new Error('Workflow timed out')
+  if (!runId) throw new Error('Dispatched but could not locate the new run id')
+
+  // Open the live status page in a new tab — it polls jobs/steps and renders progress
+  const statusUrl = chrome.runtime.getURL('status.html') +
+    `?run=${runId}&repo=${encodeURIComponent(repo)}` +
+    `&url=${encodeURIComponent(`https://${domain}`)}` +
+    `&gist=${gist.id}`
+  await chrome.tabs.create({ url: statusUrl })
+
+  return { dispatched: true, runId, domain }
 }
 
 async function injectCookies({ domain, bridgeUrl }) {

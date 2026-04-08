@@ -94,7 +94,7 @@ $('btnGh').addEventListener('click', async () => {
   if (res?.error) {
     setStatus('err', res.error)
   } else {
-    setStatus('ok', `Dispatched! Run: ${res.runUrl || 'pending'}`)
+    setStatus('ok', `Dispatched run #${res.runId} — see status tab`)
   }
   $('btnGh').disabled = false
   loadHistory()

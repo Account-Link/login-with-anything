@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Login with Anything — Capture Status</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #eee;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .container { max-width: 560px; width: 100%; padding: 32px; }
+    h1 { font-size: 24px; margin-bottom: 8px; display: flex; align-items: center; gap: 12px; }
+    .subtitle { color: #888; font-size: 14px; margin-bottom: 24px; word-break: break-all; }
+    .runlink { color: #5dade2; font-size: 12px; text-decoration: none; }
+    .runlink:hover { text-decoration: underline; }
+    .status-card { background: #16213e; border-radius: 12px; padding: 24px; margin-bottom: 24px; }
+    .status-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+    .status-icon {
+      width: 48px; height: 48px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 24px;
+    }
+    .status-icon.pending { background: #2a2a4a; }
+    .status-icon.running { background: #1a3a5a; animation: pulse 1.5s infinite; }
+    .status-icon.success { background: #1a4a2e; }
+    .status-icon.failure { background: #4a1a2e; }
+    @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:0.5 } }
+    .status-text h2 { font-size: 18px; margin-bottom: 4px; }
+    .status-text p { color: #888; font-size: 13px; }
+    .steps { margin-top: 16px; border-top: 1px solid #0f3460; padding-top: 16px; }
+    .step { display: flex; align-items: center; gap: 12px; padding: 8px 0; font-size: 13px; }
+    .step-icon {
+      width: 20px; height: 20px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; flex-shrink: 0;
+    }
+    .step-icon.done { background: #1a4a2e; color: #4ecca3; }
+    .step-icon.running { background: #1a3a5a; color: #5dade2; }
+    .step-icon.pending { background: #2a2a4a; color: #666; }
+    .step-icon.failed { background: #4a1a2e; color: #ff6b6b; }
+    .step-name { flex: 1; }
+    .step-name.pending { color: #666; }
+    .result { margin-top: 24px; }
+    .result img { width: 100%; border-radius: 8px; border: 1px solid #0f3460; }
+    .result-meta { margin-top: 12px; font-size: 12px; color: #888; }
+    .btn {
+      display: inline-block; margin-top: 16px; padding: 10px 16px;
+      background: #4ecca3; color: #1a1a2e; text-decoration: none;
+      border-radius: 6px; font-size: 13px; font-weight: 600;
+      border: none; cursor: pointer;
+    }
+    .btn:hover { background: #3db892; }
+    .loading { color: #888; font-size: 13px; padding: 16px 0; }
+    .loading::after { content: ''; animation: dots 1.5s infinite; }
+    @keyframes dots {
+      0%,20% { content: '.' } 40% { content: '..' } 60%,100% { content: '...' }
+    }
+    .saved-notice {
+      margin-top: 12px; padding: 8px 12px;
+      background: #1a3a5a; border-radius: 6px;
+      font-size: 12px; color: #5dade2;
+    }
+    .cleanup-status {
+      margin-top: 12px; padding: 10px 14px;
+      border-radius: 6px; font-size: 13px; font-weight: 500;
+      background: #2a2a4a; color: #888;
+    }
+    .cleanup-status.success { background: #1a4a2e; color: #4ecca3; }
+    .cleanup-status.error { background: #4a1a2e; color: #ff6b6b; }
+    .error {
+      background: #4a1a2e; color: #ff6b6b;
+      padding: 16px; border-radius: 8px; margin-top: 16px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Login with Anything</h1>
+    <div class="subtitle" id="captureUrl">Loading...</div>
+    <a class="runlink" id="runlink" href="#" target="_blank"></a>
+
+    <div class="status-card">
+      <div class="status-header">
+        <div class="status-icon pending" id="statusIcon">...</div>
+        <div class="status-text">
+          <h2 id="statusTitle">Initializing</h2>
+          <p id="statusSubtitle">Connecting to GitHub...</p>
+        </div>
+      </div>
+      <div class="steps" id="steps"></div>
+    </div>
+
+    <div class="loading" id="resultLoading" style="display: none;">Downloading artifact</div>
+
+    <div class="result" id="result" style="display: none;">
+      <img id="screenshot" src="" alt="Screenshot">
+      <div class="result-meta" id="resultMeta"></div>
+      <button class="btn" id="viewCertificate" style="display: none;">View certificate JSON</button>
+      <div class="saved-notice" id="savedNotice" style="display: none;">Saved to extension storage</div>
+      <div class="cleanup-status" id="cleanupStatus" style="display: none;"></div>
+    </div>
+
+    <div class="error" id="error" style="display: none;"></div>
+  </div>
+  <script src="status.js"></script>
+</body>
+</html>
