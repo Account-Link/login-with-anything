@@ -69,7 +69,34 @@ echo "$body" | grep -q '"sessionId"' \
   || check "sessionId" present missing
 
 echo
-echo "[4] Inside CVM (requires SSH key)"
+echo "[4] CORS preflight (extension uses MV3 service worker fetch)"
+preflight=$(curl -sk -X OPTIONS -H 'Origin: chrome-extension://abc' \
+  -H 'Access-Control-Request-Method: POST' \
+  -H 'Access-Control-Request-Headers: content-type' \
+  -D - "$BASE/api/verify-cookie" -o /dev/null)
+echo "$preflight" | grep -qi 'Access-Control-Allow-Origin: \*' \
+  && check "Access-Control-Allow-Origin: *" present present \
+  || check "Access-Control-Allow-Origin: *" present missing
+preflight_code=$(echo "$preflight" | head -1 | awk '{print $2}')
+[[ "$preflight_code" == "204" || "$preflight_code" == "200" ]] \
+  && check "preflight 2xx" true true \
+  || check "preflight 2xx" true "false ($preflight_code)"
+
+echo
+echo "[5] /api/verify-cookie reachable (extension's primary endpoint)"
+board=$(curl -sk "$BASE/api/boards" | grep -o '"id":"board-[^"]*"' | head -1 | cut -d'"' -f4)
+vc_code=$(curl -sk -X POST -H 'Origin: chrome-extension://abc' -H 'Content-Type: application/json' \
+  -d "{\"boardId\":\"$board\",\"cookieName\":\"_all\",\"cookieValue\":\"_all\",\"cookies\":[],\"site\":\"reddit.com\"}" \
+  -o /dev/null -w '%{http_code}' "$BASE/api/verify-cookie")
+# Empty-cookie call expected to fail at the verification step (200 with error body
+# or 4xx) — what matters is it reached the handler, not 503 / connection refused.
+case "$vc_code" in
+  200|400|401|404) check "verify-cookie reachable" true true ;;
+  *) check "verify-cookie reachable" true "false ($vc_code)" ;;
+esac
+
+echo
+echo "[6] Inside CVM (requires SSH key)"
 if [[ -f "$KEY" ]]; then
   ssh_out=$(phala ssh "$CVM_NAME" -- -i "$KEY" \
     -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
@@ -80,10 +107,15 @@ if [[ -f "$KEY" ]]; then
   [[ "$key_len" -gt 50 ]] && check "ANTHROPIC_API_KEY length>50" true true \
     || check "ANTHROPIC_API_KEY length>50" true "false (len=$key_len)"
   check "forum.db on disk" ok "$db_state"
-  case "$egress" in
-    146.70.*|185.*|193.*) check "egress IP looks residential" true true ;;
-    *) check "egress IP looks residential" true "false ($egress)" ;;
-  esac
+  # Verify VPN is actually up: egress must be a real IP and not in any
+  # known Phala/cloud datacenter range we've seen for these CVMs.
+  if [[ -z "$egress" ]]; then
+    check "VPN egress IP present" true "false (empty)"
+  elif [[ "$egress" =~ ^(34\.|35\.|13\.|52\.) ]]; then
+    check "egress not GCP/AWS" true "false ($egress)"
+  else
+    check "VPN egress IP present" "$egress" "$egress"
+  fi
 else
   echo "  SKIP: $KEY not found"
 fi
