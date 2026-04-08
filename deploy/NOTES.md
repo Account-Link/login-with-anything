@@ -149,31 +149,29 @@ The workflow file is in `.github/workflows/verify.yml`. The `amiller/login-with-
 fork does NOT have this workflow — push there too if your extension's
 `settings.ghRepo` targets the fork instead.
 
-**Required repo secret:** `GH_PAT` (already set on Account-Link, used by
-`twitter-like.yml` too). Must be a PAT with `gist` scope. **Beware of
-trailing whitespace** when setting via the GitHub web UI — Go's HTTP client
-rejects auth headers with `\r\n`. The workflow strips whitespace before
-exporting, so it's robust to that, but a clean re-set is preferred.
+**Required repo secrets** (all on `Account-Link/login-with-anything`):
+- `GH_PAT` — PAT with `gist` scope, also used by `twitter-like.yml`. The
+  workflow strips trailing whitespace before exporting; the existing
+  secret had a `\r\n` that broke Go's HTTP client until that fix.
+- `OPENVPN_USER`, `OPENVPN_PASS`, `OVPN_CONFIG_BASE64` — same Mullvad
+  credentials we use on the Phala CVM. Set 2026-04-08 from the values in
+  `deploy/secrets.env`. The workflow degrades gracefully (warning, no
+  proxy) if any are missing.
 
-**Reddit / Twitter / X.com caveat — datacenter IP blocking.** GitHub
-Actions runners egress from Azure IP ranges, and reddit explicitly blocks
-them ("You've been blocked by network security. To continue, log in to your
-Reddit account or use your developer token"). Verified 2026-04-08: a
-real run with a test gist + reddit.com produced a real screenshot, but of
-the block page, not the logged-in content. This is the reason the TEE
-path on the CVM has the Mullvad sidecar — github runners don't.
+**VPN sidecar architecture.** verify.yml mirrors the Phala CVM compose:
+brings up `ghcr.io/amiller/openvpn-socks5@sha256:287ca89c...` (same
+digest), puts both containers on a `lwa-net` docker network, points the
+browser's `PROXY_URL` env at `socks5://lwa-vpn:1080`. Chromium's
+`--proxy-server=$PROXY_URL` flag picks it up via `chromium.conf`.
+Verified end-to-end 2026-04-08 (run 24152130997): VPN egress
+`135.119.239.131` (Mullvad), reddit.com loaded as the real homepage
+with real subreddit content — no more block page.
 
-What works on github mode:
-- `api.anthropic.com`, `api.github.com` (API endpoints, no anti-bot)
-- Most non-anti-bot sites
-
-What's likely broken on github mode:
-- reddit.com, x.com / twitter.com, anything with Cloudflare anti-bot
-- For these, use the TEE mode on the CVM instead
-
-To make github mode work for blocked sites, you'd need to install an
-openvpn or wireguard client on the runner with a residential exit. Real
-work, not done.
+DNS leak note: Chromium's SOCKS5 mode does local DNS by default. The
+HTTP traffic itself goes through the proxy, so reddit sees the Mullvad
+IP, but the runner does a DNS lookup for `reddit.com` against its own
+resolver. Functional anti-bot bypass works; full DNS-over-SOCKS would
+need `--host-resolver-rules` in `chromium.conf` (not done).
 
 **To dispatch manually for testing:**
 ```bash
