@@ -5,7 +5,7 @@
 <title>Login with Everything</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: system-ui; background: #fafafa; color: #333; }
+  body { font-family: system-ui; background: #fafafa; color: #333; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
   .topbar { display: flex; align-items: center; justify-content: space-between; padding: 10px 20px; background: white; border-bottom: 1px solid #e5e5e5; }
   .topbar h1 { font-size: 16px; color: #2255cc; }
   .topbar .controls { display: flex; gap: 8px; align-items: center; font-size: 12px; }
@@ -14,7 +14,7 @@
   .topbar button:hover { background: #1a44aa; }
   .topbar button.secondary { background: #eee; color: #333; }
   .topbar .status { font-size: 11px; color: #999; }
-  .layout { display: flex; height: calc(100vh - 46px); }
+  .layout { display: flex; flex: 1; min-height: 0; }
   .panel { flex: 1; display: flex; flex-direction: column; }
   .panel iframe { flex: 1; border: none; }
   .panel-header { padding: 6px 12px; background: #f5f5f5; border-bottom: 1px solid #e5e5e5; font-size: 12px; color: #666; display: flex; justify-content: space-between; align-items: center; }
@@ -25,6 +25,112 @@
   .inject-bar .btn-inject { background: #2255cc; color: white; }
   .inject-bar .btn-nav { background: #eee; color: #333; }
   #injectStatus { font-size: 11px; color: #999; }
+
+  /* Captures strip */
+  .captures-bar {
+    background: #1a1a2e;
+    color: #eee;
+    padding: 10px 16px;
+    border-top: 1px solid #2a2a4a;
+    max-height: 220px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .captures-bar h2 {
+    font-size: 12px;
+    color: #888;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+  }
+  .captures-empty { font-size: 12px; color: #555; padding: 4px 0; }
+  .captures-grid { display: inline-flex; gap: 12px; align-items: stretch; }
+  .cap-card {
+    display: inline-block;
+    width: 220px;
+    background: #16213e;
+    border-radius: 8px;
+    overflow: hidden;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: transform 0.15s;
+  }
+  .cap-card:hover { transform: translateY(-2px); }
+  .cap-card.pending, .cap-card.running { border-color: #5dade2; animation: cap-pulse 2s infinite; }
+  .cap-card.failed { border-color: #ff6b6b; }
+  @keyframes cap-pulse {
+    0%, 100% { border-color: #5dade2; }
+    50%      { border-color: #1a3a5a; }
+  }
+  .cap-thumb {
+    width: 100%;
+    height: 110px;
+    object-fit: cover;
+    background: #0f3460;
+    display: block;
+  }
+  .cap-thumb-placeholder {
+    width: 100%;
+    height: 110px;
+    background: #0f3460;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #5dade2;
+    font-size: 11px;
+  }
+  .cap-info { padding: 8px 10px; }
+  .cap-domain { font-size: 12px; color: #4ecca3; font-weight: 600; }
+  .cap-meta { font-size: 10px; color: #888; margin-top: 2px; }
+  .cap-error { font-size: 10px; color: #ff6b6b; margin-top: 2px; }
+  .cap-status-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    margin-left: 4px;
+  }
+  .cap-status-badge.pending, .cap-status-badge.running { background: #1a3a5a; color: #5dade2; }
+  .cap-status-badge.failed { background: #4a1a2e; color: #ff6b6b; }
+  .cap-status-badge.tee { background: #1a4a2e; color: #4ecca3; }
+
+  /* Modal */
+  .cap-modal {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.92);
+    z-index: 1000;
+    padding: 32px;
+    overflow: auto;
+  }
+  .cap-modal.open { display: block; }
+  .cap-modal-content { max-width: 1100px; margin: 0 auto; color: #eee; }
+  .cap-modal-close {
+    position: fixed; top: 16px; right: 16px;
+    background: none; border: none; color: #888;
+    font-size: 28px; cursor: pointer;
+  }
+  .cap-modal-close:hover { color: #fff; }
+  .cap-modal-img { width: 100%; border-radius: 8px; margin-bottom: 16px; }
+  .cap-modal-meta {
+    background: #16213e; padding: 16px; border-radius: 8px;
+    margin-bottom: 16px; font-size: 13px;
+  }
+  .cap-modal-meta h3 { font-size: 14px; color: #4ecca3; margin-bottom: 8px; }
+  .cap-modal-meta p { color: #aaa; margin-bottom: 4px; word-break: break-all; }
+  .cap-modal-meta a { color: #5dade2; }
+  .cap-modal-btns button, .cap-modal-btns a {
+    padding: 8px 14px; margin-right: 8px; border-radius: 6px;
+    font-size: 12px; font-weight: 600; cursor: pointer;
+    border: none; text-decoration: none; display: inline-block;
+  }
+  .cap-modal-btns .primary { background: #4ecca3; color: #1a1a2e; }
+  .cap-modal-btns .secondary { background: #2a2a4a; color: #eee; }
 </style>
 </head>
 <body>
@@ -60,6 +166,31 @@
         <button style="font-size:11px;padding:2px 8px;border:1px solid #ddd;border-radius:3px;background:white;cursor:pointer" id="toggleNeko">Hide</button>
       </div>
       <iframe id="nekoFrame" src="about:blank"></iframe>
+    </div>
+  </div>
+
+  <div class="captures-bar">
+    <h2>Captures</h2>
+    <div class="captures-grid" id="capturesGrid"></div>
+    <div class="captures-empty" id="capturesEmpty">No captures yet — verify a site to see one here.</div>
+  </div>
+
+  <div class="cap-modal" id="capModal">
+    <button class="cap-modal-close" id="capModalClose">&times;</button>
+    <div class="cap-modal-content">
+      <img class="cap-modal-img" id="capModalImg" src="">
+      <div class="cap-modal-meta">
+        <h3 id="capModalDomain"></h3>
+        <p id="capModalUrl"></p>
+        <p id="capModalTime"></p>
+        <p id="capModalRunUrl"></p>
+        <p id="capModalIdentity"></p>
+      </div>
+      <div class="cap-modal-btns">
+        <button class="primary" id="capModalCert">View certificate JSON</button>
+        <a class="secondary" id="capModalRun" href="#" target="_blank">Open run on GitHub</a>
+        <button class="secondary" id="capModalDelete">Delete</button>
+      </div>
     </div>
   </div>
   <script>
@@ -157,7 +288,117 @@
       }
     })
 
+    // ---- Captures strip ----
+
+    function timeAgo(ts) {
+      if (!ts) return ''
+      const t = typeof ts === 'number' ? ts : new Date(ts).getTime()
+      const sec = Math.floor((Date.now() - t) / 1000)
+      if (sec < 60) return 'just now'
+      if (sec < 3600) return `${Math.floor(sec / 60)}m ago`
+      if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`
+      return `${Math.floor(sec / 86400)}d ago`
+    }
+
+    let modalIdx = -1
+    let cachedHistory = []
+
+    async function renderCaptures() {
+      const { loginHistory = [] } = await chrome.storage.local.get('loginHistory')
+      cachedHistory = loginHistory
+      const grid = $('capturesGrid')
+      const empty = $('capturesEmpty')
+      if (!loginHistory.length) {
+        grid.innerHTML = ''
+        empty.style.display = 'block'
+        return
+      }
+      empty.style.display = 'none'
+      // Sort: pending/running first, then by timestamp desc
+      const sorted = [...loginHistory].sort((a, b) => {
+        const order = s => (s === 'pending' || s === 'running') ? 0 : (s === 'failed' ? 1 : 2)
+        const oa = order(a.status), ob = order(b.status)
+        if (oa !== ob) return oa - ob
+        return (b.timestamp || 0) - (a.timestamp || 0)
+      })
+      grid.innerHTML = sorted.map(c => {
+        const idx = loginHistory.indexOf(c)
+        const status = c.status || (c.method === 'tee' ? 'tee' : 'completed')
+        const isPending = status === 'pending' || status === 'running'
+        const thumb = c.screenshot
+          ? `<img class="cap-thumb" src="${c.screenshot}" alt="">`
+          : `<div class="cap-thumb-placeholder">${isPending ? 'capturing…' : (status === 'failed' ? 'failed' : 'no screenshot')}</div>`
+        const badge = status === 'tee' ? '<span class="cap-status-badge tee">TEE</span>'
+                    : isPending ? `<span class="cap-status-badge ${status}">${status}</span>`
+                    : status === 'failed' ? '<span class="cap-status-badge failed">failed</span>'
+                    : ''
+        return `
+          <div class="cap-card ${status}" data-idx="${idx}">
+            ${thumb}
+            <div class="cap-info">
+              <div class="cap-domain">${c.domain || '?'}${badge}</div>
+              <div class="cap-meta">${c.identity || c.method || ''} · ${timeAgo(c.timestamp || c.startTime)}</div>
+              ${c.error ? `<div class="cap-error">${c.error}</div>` : ''}
+            </div>
+          </div>
+        `
+      }).join('')
+      grid.querySelectorAll('.cap-card').forEach(card => {
+        card.addEventListener('click', () => {
+          const i = parseInt(card.dataset.idx)
+          const c = loginHistory[i]
+          if (c.status === 'pending' || c.status === 'running') {
+            // Re-open the live status tab
+            const url = chrome.runtime.getURL('status.html') +
+              `?run=${c.runId}&repo=${encodeURIComponent(c.repo)}&url=${encodeURIComponent(c.url || '')}`
+            chrome.tabs.create({ url })
+          } else {
+            openCapModal(i)
+          }
+        })
+      })
+    }
+
+    function openCapModal(i) {
+      modalIdx = i
+      const c = cachedHistory[i]
+      $('capModalImg').src = c.screenshot || ''
+      $('capModalImg').style.display = c.screenshot ? 'block' : 'none'
+      $('capModalDomain').textContent = c.domain || '?'
+      $('capModalUrl').textContent = c.url ? `URL: ${c.url}` : ''
+      $('capModalTime').textContent = `Captured: ${new Date(c.timestamp || c.startTime || Date.now()).toLocaleString()}`
+      $('capModalRunUrl').innerHTML = c.runUrl ? `Run: <a href="${c.runUrl}" target="_blank">${c.runUrl}</a>` : ''
+      $('capModalIdentity').textContent = c.identity ? `Identity: ${c.identity}` : ''
+      $('capModalRun').href = c.runUrl || '#'
+      $('capModalRun').style.display = c.runUrl ? 'inline-block' : 'none'
+      $('capModalCert').style.display = c.certificate ? 'inline-block' : 'none'
+      $('capModal').classList.add('open')
+    }
+
+    $('capModalClose').addEventListener('click', () => $('capModal').classList.remove('open'))
+    $('capModal').addEventListener('click', e => { if (e.target === $('capModal')) $('capModal').classList.remove('open') })
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') $('capModal').classList.remove('open') })
+    $('capModalCert').addEventListener('click', () => {
+      const c = cachedHistory[modalIdx]
+      if (!c?.certificate) return
+      const blob = new Blob([JSON.stringify(c.certificate, null, 2)], { type: 'application/json' })
+      window.open(URL.createObjectURL(blob), '_blank')
+    })
+    $('capModalDelete').addEventListener('click', async () => {
+      const { loginHistory = [] } = await chrome.storage.local.get('loginHistory')
+      loginHistory.splice(modalIdx, 1)
+      await chrome.storage.local.set({ loginHistory })
+      $('capModal').classList.remove('open')
+      renderCaptures()
+    })
+
+    // Live updates: re-render whenever loginHistory changes (status.js writes to it)
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === 'local' && changes.loginHistory) renderCaptures()
+    })
+
     init()
+    renderCaptures()
   </script>
 </body>
 </html>

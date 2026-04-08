@@ -45,22 +45,39 @@ async function init() {
     showError('Missing run id, repo, or GitHub token in settings')
     return
   }
+  // Insert a pending record into loginHistory so the dashboard sees it immediately
+  await upsertCapture({
+    runId, repo, domain: extractDomain(captureUrl), url: captureUrl,
+    method: 'github', status: 'pending',
+    runUrl: `https://github.com/${repo}/actions/runs/${runId}`,
+    startTime: new Date().toISOString(), timestamp: Date.now()
+  })
   poll()
+}
+
+function extractDomain(u) {
+  try { return new URL(u).hostname.replace(/^www\./, '') } catch { return u }
 }
 
 async function poll() {
   try {
     const run = await fetchRun()
     updateStatus(run)
+    if (run.status === 'in_progress') {
+      await upsertCapture({ runId, status: 'running' })
+    }
     if (run.status === 'completed') {
       if (run.conclusion === 'success') {
         await fetchAndDisplayResult()
+      } else {
+        await upsertCapture({ runId, status: 'failed', error: `Workflow ${run.conclusion}` })
       }
       if (gistId) await deleteGist()
     } else {
       setTimeout(poll, 3000)
     }
   } catch (err) {
+    await upsertCapture({ runId, status: 'failed', error: err.message })
     showError(err.message)
   }
 }
@@ -170,8 +187,10 @@ async function fetchAndDisplayResult() {
   $('resultLoading').style.display = 'none'
   $('result').style.display = 'block'
 
+  let screenshotDataUrl = null
   if (files['screenshot.png']) {
     $('screenshot').src = URL.createObjectURL(files['screenshot.png'])
+    screenshotDataUrl = await blobToDataUrl(files['screenshot.png'])
   } else {
     $('screenshot').alt = 'screenshot.png not in artifact'
   }
@@ -187,13 +206,27 @@ async function fetchAndDisplayResult() {
     $('viewCertificate').style.display = 'inline-block'
   }
 
-  await saveLogin({
-    domain: cert?.domain || captureUrl,
+  await upsertCapture({
+    runId,
+    domain: cert?.domain || extractDomain(captureUrl),
+    url: cert?.url || captureUrl,
     method: 'github',
+    status: 'completed',
     runUrl: `https://github.com/${repo}/actions/runs/${runId}`,
-    timestamp: Date.now()
+    screenshot: screenshotDataUrl,
+    certificate: cert,
+    timestamp: Date.now(),
+    completedAt: new Date().toISOString()
   })
   $('savedNotice').style.display = 'block'
+}
+
+function blobToDataUrl(blob) {
+  return new Promise(resolve => {
+    const r = new FileReader()
+    r.onloadend = () => resolve(r.result)
+    r.readAsDataURL(blob)
+  })
 }
 
 async function deleteGist() {
@@ -217,10 +250,16 @@ async function deleteGist() {
   }
 }
 
-async function saveLogin(entry) {
+// Idempotent: find by runId and merge, or insert at the front.
+async function upsertCapture(partial) {
   const { loginHistory = [] } = await chrome.storage.local.get('loginHistory')
-  loginHistory.unshift(entry)
-  if (loginHistory.length > 50) loginHistory.length = 50
+  const idx = loginHistory.findIndex(e => e.runId && e.runId === partial.runId)
+  if (idx >= 0) {
+    loginHistory[idx] = { ...loginHistory[idx], ...partial }
+  } else {
+    loginHistory.unshift(partial)
+    if (loginHistory.length > 50) loginHistory.length = 50
+  }
   await chrome.storage.local.set({ loginHistory })
 }
 
