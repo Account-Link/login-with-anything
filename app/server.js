@@ -798,14 +798,17 @@ app.post('/api/verify-tee', async (req, res) => {
     const pageText = capture.certificate?.pageInfo?.bodyText || ''
     const pageTitle = capture.certificate?.pageInfo?.title || ''
 
+    const userContent = [
+      { type: 'text', text: `Verify: ${proofDesc}\nPage title: ${pageTitle}\nPage text (first 2000 chars):\n${pageText.slice(0, 2000)}` }
+    ]
+    if (screenshot) {
+      userContent.push({ type: 'image', source: { type: 'base64', media_type: 'image/png', data: screenshot } })
+    }
     const msg = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 512,
-      system: `You analyze captured web page text to verify identity claims. Return ONLY valid JSON: { "success": boolean, "claim": "what was proven", "evidence": "key details extracted" }`,
-      messages: [{
-        role: 'user',
-        content: `Verify: ${proofDesc}\nPage title: ${pageTitle}\nPage text (first 2000 chars):\n${pageText.slice(0, 2000)}`
-      }]
+      system: `You analyze captured web page text and screenshot to verify identity claims. The screenshot shows what the TEE browser rendered with the user's session cookies. Return ONLY valid JSON: { "success": boolean, "claim": "what was proven", "evidence": "key details extracted from the page" }`,
+      messages: [{ role: 'user', content: userContent }]
     })
 
     const analysisText = msg.content[0].text.replace(/^```\w*\n?/, '').replace(/\n?```$/, '').trim()
