@@ -255,9 +255,11 @@ app.post('/api/verify-cookie', async (req, res) => {
     verifyUrl = `https://x.com/${username}`
     extractIdentity = (json, pageText) => ({ identity: username, evidence: 'Session verified' })
   } else {
-    // Generic site: use site as full URL if provided, otherwise homepage.
-    // This lets custom boards set site to e.g. "https://www.amazon.com/cart"
-    verifyUrl = site.startsWith('http') ? site : `https://${domain}`
+    // Generic site: prefer the board's saved site if it's a full URL (e.g.
+    // "https://www.amazon.com/cart"), otherwise fall back to the request's site.
+    verifyUrl = board.site?.startsWith('http') ? board.site
+              : site.startsWith('http') ? site
+              : `https://${domain}`
     extractIdentity = null  // signals Claude+vision analysis below
   }
 
