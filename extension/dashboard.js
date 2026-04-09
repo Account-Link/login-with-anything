@@ -16,23 +16,23 @@ function timeAgo(ts) {
   return `${Math.floor(sec / 86400)}d ago`
 }
 
-function deriveNekoUrl(forumUrl) {
+function deriveBridgeUrl(forumUrl, teeUrl) {
+  if (teeUrl) return teeUrl.replace(/\/$/, '')
   if (!forumUrl) return null
   try {
-    const u = new URL(forumUrl)
-    if (u.hostname === 'localhost') return `${u.protocol}//${u.hostname}:8082`
-    return forumUrl.replace('-3003.', '-8080.').replace(':3003', ':8080')
+    new URL(forumUrl)
+    return forumUrl.replace('-3003.', '-3000.').replace(':3003', ':3000').replace(/\/$/, '')
   } catch { return null }
 }
+
+let bridgeUrl = null
 
 async function init() {
   const { settings = {} } = await chrome.storage.local.get('settings')
   const forumUrl = settings.forumUrl
-  const nekoUrl = deriveNekoUrl(forumUrl)
+  bridgeUrl = deriveBridgeUrl(forumUrl, settings.teeUrl)
   $('openForumBtn').disabled = !forumUrl
-  $('openNekoBtn').disabled = !nekoUrl
   $('openForumBtn').onclick = () => forumUrl && chrome.tabs.create({ url: forumUrl })
-  $('openNekoBtn').onclick = () => nekoUrl && chrome.tabs.create({ url: nekoUrl })
 }
 
 async function renderCaptures() {
@@ -155,5 +155,95 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.loginHistory) renderCaptures()
 })
 
+// ---- Tabs ----
+
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name))
+  $('section-captures').style.display = name === 'captures' ? '' : 'none'
+  $('section-viewer').style.display = name === 'viewer' ? '' : 'none'
+  if (name === 'viewer') startViewer()
+  else stopViewer()
+}
+
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => showTab(t.dataset.tab))
+})
+
+// ---- Live TEE browser viewer ----
+// Polls bridge /screenshot at a configurable interval and swaps the <img>.
+// Way simpler than getting Neko WebRTC working through the dstack gateway.
+
+let viewerTimer = null
+let viewerPaused = false
+let lastObjectUrl = null
+
+function setViewerStatus(text, kind) {
+  const el = $('viewerStatus')
+  el.textContent = text
+  el.className = 'status' + (kind ? ' ' + kind : '')
+}
+
+async function fetchOneFrame() {
+  if (!bridgeUrl) {
+    $('viewerFrame').style.display = 'none'
+    $('viewerEmpty').style.display = 'block'
+    setViewerStatus('Bridge URL not set', 'err')
+    return
+  }
+  try {
+    const res = await fetch(`${bridgeUrl}/screenshot?_=${Date.now()}`, { cache: 'no-store' })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const blob = await res.blob()
+    if (lastObjectUrl) URL.revokeObjectURL(lastObjectUrl)
+    lastObjectUrl = URL.createObjectURL(blob)
+    $('viewerImg').src = lastObjectUrl
+    $('viewerFrame').style.display = 'block'
+    $('viewerEmpty').style.display = 'none'
+    setViewerStatus(`Last frame: ${new Date().toLocaleTimeString()}`, 'ok')
+  } catch (e) {
+    setViewerStatus(`Bridge error: ${e.message}`, 'err')
+  }
+}
+
+function startViewer() {
+  if (viewerTimer || viewerPaused) {
+    if (viewerPaused) setViewerStatus('Paused', 'paused')
+    return
+  }
+  // Pull a frame immediately, then on interval
+  fetchOneFrame()
+  const interval = parseInt($('viewerInterval').value || '1500')
+  viewerTimer = setInterval(fetchOneFrame, interval)
+}
+
+function stopViewer() {
+  if (viewerTimer) {
+    clearInterval(viewerTimer)
+    viewerTimer = null
+  }
+}
+
+$('viewerPauseBtn').addEventListener('click', () => {
+  viewerPaused = !viewerPaused
+  if (viewerPaused) {
+    stopViewer()
+    setViewerStatus('Paused', 'paused')
+    $('viewerPauseBtn').textContent = 'Resume'
+  } else {
+    $('viewerPauseBtn').textContent = 'Pause'
+    startViewer()
+  }
+})
+
+$('viewerRefreshBtn').addEventListener('click', fetchOneFrame)
+
+$('viewerInterval').addEventListener('change', () => {
+  if (viewerTimer && !viewerPaused) {
+    stopViewer()
+    startViewer()
+  }
+})
+
 init()
 renderCaptures()
+showTab('captures')

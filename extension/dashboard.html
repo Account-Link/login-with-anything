@@ -120,6 +120,50 @@
   .modal-meta a { color: #5dade2; text-decoration: none; }
   .modal-meta a:hover { text-decoration: underline; }
   .modal-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 4px; padding: 0 24px; background: #16213e; border-bottom: 1px solid #0f3460; }
+  .tab {
+    padding: 10px 18px;
+    background: none; border: none; color: #888;
+    font-size: 13px; font-weight: 600; cursor: pointer;
+    border-bottom: 2px solid transparent;
+  }
+  .tab:hover { color: #ccc; }
+  .tab.active { color: #4ecca3; border-bottom-color: #4ecca3; }
+
+  /* Live viewer */
+  .viewer-wrap {
+    padding: 20px 24px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+  .viewer-controls {
+    display: flex; gap: 12px; align-items: center;
+    margin-bottom: 14px;
+    font-size: 12px; color: #888;
+  }
+  .viewer-controls .status { margin-left: auto; }
+  .viewer-controls .status.ok { color: #4ecca3; }
+  .viewer-controls .status.err { color: #ff6b6b; }
+  .viewer-controls .status.paused { color: #5dade2; }
+  .viewer-frame {
+    background: #0f3460;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid #16213e;
+  }
+  .viewer-frame img {
+    width: 100%; display: block;
+    background: #000;
+  }
+  .viewer-empty {
+    padding: 80px 24px;
+    text-align: center;
+    color: #888;
+  }
+  .viewer-empty p { font-size: 13px; max-width: 520px; margin: 8px auto; line-height: 1.6; }
+  .viewer-empty code { background: #0f3460; padding: 2px 6px; border-radius: 3px; font-size: 11px; color: #5dade2; }
 </style>
 </head>
 <body>
@@ -127,12 +171,47 @@
     <h1>Login with Everything</h1>
     <div class="controls">
       <button class="btn" id="openForumBtn">Open Forum</button>
-      <button class="btn" id="openNekoBtn">Open TEE Browser</button>
       <button class="btn danger" id="clearBrokenBtn" title="Remove failed, pending, and screenshot-less github captures">Clear broken</button>
     </div>
   </div>
 
-  <main>
+  <div class="tabs">
+    <button class="tab active" data-tab="captures" id="tabCaptures">Captures</button>
+    <button class="tab" data-tab="viewer" id="tabViewer">Live TEE Browser</button>
+  </div>
+
+  <section id="section-viewer" style="display:none;">
+    <div class="viewer-wrap">
+      <div class="viewer-controls">
+        <button class="btn" id="viewerPauseBtn">Pause</button>
+        <button class="btn" id="viewerRefreshBtn">Refresh now</button>
+        <label style="display:flex;gap:6px;align-items:center;">
+          Interval:
+          <select id="viewerInterval" style="background:#1a1a2e;color:#eee;border:1px solid #0f3460;border-radius:4px;padding:4px 6px;font-size:12px;">
+            <option value="500">500 ms</option>
+            <option value="1000">1 s</option>
+            <option value="1500" selected>1.5 s</option>
+            <option value="3000">3 s</option>
+          </select>
+        </label>
+        <span class="status" id="viewerStatus">Idle</span>
+      </div>
+      <div class="viewer-frame" id="viewerFrame">
+        <img id="viewerImg" alt="">
+      </div>
+      <div class="viewer-empty" id="viewerEmpty">
+        <h2>No bridge configured</h2>
+        <p>
+          Set the <strong>Forum URL</strong> in the extension popup and the
+          dashboard will derive the bridge URL automatically (replaces
+          <code>-3003.</code> with <code>-3000.</code>). Then come back here
+          and click Refresh.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <main id="section-captures">
     <div class="grid" id="grid"></div>
     <div class="empty" id="empty">
       <h2>No captures yet</h2>
