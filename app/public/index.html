@@ -51,6 +51,12 @@
       margin: 0.5rem 0; cursor: pointer; border: 2px solid transparent; transition: all 0.15s;
     }
     .board:hover { border-color: #8ecfa0; background: rgba(255,255,255,0.9); }
+    .delete-board {
+      position: absolute; top: 8px; right: 8px;
+      background: none; border: none; color: #ccc; font-size: 18px;
+      cursor: pointer; padding: 2px 6px; border-radius: 4px; line-height: 1;
+    }
+    .delete-board:hover { color: #e55; background: rgba(255,0,0,0.08); }
     .board h3 { margin: 0 0 0.25rem; font-size: 1rem; color: #222; }
     .board .meta { font-size: 0.8rem; color: #999; }
     .board .predicate { font-size: 0.85rem; color: #7733bb; font-family: monospace; }
@@ -192,13 +198,20 @@
         const s = saved[b.id]
         const loggedIn = s ? `<span class="flair">logged in as ${esc(s.identity)}</span>` : ''
         return `
-        <div class="board" onclick="openBoard('${b.id}')">
+        <div class="board" onclick="openBoard('${b.id}')" style="position:relative">
+          <button class="delete-board" onclick="event.stopPropagation(); deleteBoard('${b.id}', '${esc(b.name)}')" title="Delete board">&times;</button>
           <h3>${esc(b.name)} ${loggedIn}</h3>
           <span class="badge ${b.method}">${b.method === 'api_key' ? 'API Key' : 'Cookie'}</span>
           <span class="predicate">${esc(b.predicate)}</span>
           <div class="meta">${b.postCount} posts &middot; ${esc(b.site)}</div>
         </div>`
       }).join('')
+    }
+
+    async function deleteBoard(id, name) {
+      if (!confirm(`Delete board "${name}" and all its posts?`)) return
+      await fetch(`/api/boards/${id}`, { method: 'DELETE' })
+      loadBoards()
     }
 
     function showBoards() {

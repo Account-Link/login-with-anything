@@ -91,6 +91,13 @@ app.get('/api/boards/:id', (req, res) => {
   res.json(board)
 })
 
+app.delete('/api/boards/:id', (req, res) => {
+  db.prepare('DELETE FROM posts WHERE board_id = ?').run(req.params.id)
+  const result = db.prepare('DELETE FROM boards WHERE id = ?').run(req.params.id)
+  if (result.changes === 0) return res.status(404).json({ error: 'Board not found' })
+  res.json({ deleted: true })
+})
+
 // Verify predicate (API key method)
 app.post('/api/verify', async (req, res) => {
   const { boardId, apiKey } = req.body
