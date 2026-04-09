@@ -1,104 +1,10 @@
-// Dashboard for Login with Everything.
-// Lives as an external script because MV3's default CSP blocks inline <script>
-// on extension pages — until this file existed, the dashboard's inline script
-// silently never ran, so the forum URL didn't load and the captures grid
-// couldn't render.
+// Dashboard for Login with Everything — captures gallery only.
+// Lives as an external script because MV3's default CSP blocks inline <script>.
 
 const $ = (id) => document.getElementById(id)
 
-async function init() {
-  const { settings = {} } = await chrome.storage.local.get('settings')
-  $('forumUrl').value = settings.forumUrl || ''
-  if (settings.forumUrl) {
-    $('forumFrame').src = settings.forumUrl
-    $('connStatus').textContent = 'Connected'
-    $('connStatus').style.color = '#22c55e'
-  }
-  // Neko is on port 8080 of the same host, or 8082 locally
-  if (settings.forumUrl) {
-    try {
-      const u = new URL(settings.forumUrl)
-      const nekoPort = u.hostname === 'localhost' ? '8082' : '8080'
-      const nekoUrl = u.port === '3003'
-        ? settings.forumUrl.replace('-3003.', '-8080.').replace(':3003', `:${nekoPort}`)
-        : `${u.protocol}//${u.hostname}:${nekoPort}`
-      $('nekoFrame').src = nekoUrl
-    } catch {}
-  }
-  // Default inject domain from current tab
-  const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true })
-  if (tab?.url) {
-    try {
-      const domain = new URL(tab.url).hostname.replace(/^www\./, '')
-      if (!domain.startsWith('chrome')) $('injectDomain').value = domain
-    } catch {}
-  }
-}
-
-$('saveUrl').addEventListener('click', async () => {
-  const forumUrl = $('forumUrl').value.replace(/\/$/, '')
-  const { settings = {} } = await chrome.storage.local.get('settings')
-  settings.forumUrl = forumUrl
-  await chrome.storage.local.set({ settings })
-  $('forumFrame').src = forumUrl
-  $('connStatus').textContent = 'Saved'
-  $('connStatus').style.color = '#22c55e'
-})
-
-$('openForum').addEventListener('click', () => {
-  const url = $('forumUrl').value
-  if (url) chrome.tabs.create({ url })
-})
-
-$('btnInject').addEventListener('click', async () => {
-  const domain = $('injectDomain').value.trim()
-  if (!domain) return
-  $('injectStatus').textContent = 'Injecting...'
-  const { settings = {} } = await chrome.storage.local.get('settings')
-  const bridgeUrl = settings.teeUrl || settings.forumUrl?.replace(':3003', ':3002')?.replace('-3003.', '-3000.')
-  if (!bridgeUrl) { $('injectStatus').textContent = 'No bridge URL'; return }
-
-  const res = await chrome.runtime.sendMessage({ type: 'injectCookies', domain, bridgeUrl })
-  if (res?.error) {
-    $('injectStatus').textContent = res.error
-    $('injectStatus').style.color = '#ef4444'
-  } else {
-    $('injectStatus').textContent = `Injected ${res?.set || '?'} cookies`
-    $('injectStatus').style.color = '#22c55e'
-  }
-})
-
-$('btnNav').addEventListener('click', () => {
-  const domain = $('injectDomain').value.trim()
-  if (domain) $('navUrl').value = `https://${domain}`
-})
-
-$('btnNavGo').addEventListener('click', async () => {
-  const url = $('navUrl').value.trim()
-  if (!url) return
-  const { settings = {} } = await chrome.storage.local.get('settings')
-  const bridgeUrl = settings.teeUrl || settings.forumUrl?.replace(':3003', ':3002')?.replace('-3003.', '-3000.')
-  if (!bridgeUrl) return
-  await fetch(bridgeUrl + '/navigate', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url })
-  })
-})
-
-$('toggleNeko').addEventListener('click', () => {
-  const panel = $('nekoPanel')
-  const btn = $('toggleNeko')
-  if (panel.style.display === 'none') {
-    panel.style.display = 'flex'
-    btn.textContent = 'Hide'
-  } else {
-    panel.style.display = 'none'
-    btn.textContent = 'Show Browser'
-  }
-})
-
-// ---- Captures strip ----
+let modalIdx = -1
+let cachedHistory = []
 
 function timeAgo(ts) {
   if (!ts) return ''
@@ -110,14 +16,30 @@ function timeAgo(ts) {
   return `${Math.floor(sec / 86400)}d ago`
 }
 
-let modalIdx = -1
-let cachedHistory = []
+function deriveNekoUrl(forumUrl) {
+  if (!forumUrl) return null
+  try {
+    const u = new URL(forumUrl)
+    if (u.hostname === 'localhost') return `${u.protocol}//${u.hostname}:8082`
+    return forumUrl.replace('-3003.', '-8080.').replace(':3003', ':8080')
+  } catch { return null }
+}
+
+async function init() {
+  const { settings = {} } = await chrome.storage.local.get('settings')
+  const forumUrl = settings.forumUrl
+  const nekoUrl = deriveNekoUrl(forumUrl)
+  $('openForumBtn').disabled = !forumUrl
+  $('openNekoBtn').disabled = !nekoUrl
+  $('openForumBtn').onclick = () => forumUrl && chrome.tabs.create({ url: forumUrl })
+  $('openNekoBtn').onclick = () => nekoUrl && chrome.tabs.create({ url: nekoUrl })
+}
 
 async function renderCaptures() {
   const { loginHistory = [] } = await chrome.storage.local.get('loginHistory')
   cachedHistory = loginHistory
-  const grid = $('capturesGrid')
-  const empty = $('capturesEmpty')
+  const grid = $('grid')
+  const empty = $('empty')
   if (!loginHistory.length) {
     grid.innerHTML = ''
     empty.style.display = 'block'
@@ -133,75 +55,102 @@ async function renderCaptures() {
   })
   grid.innerHTML = sorted.map(c => {
     const idx = loginHistory.indexOf(c)
-    const status = c.status || (c.method === 'tee' ? 'tee' : 'completed')
+    const status = c.status || (c.method === 'tee' ? 'tee' : 'github')
     const isPending = status === 'pending' || status === 'running'
     const thumb = c.screenshot
-      ? `<img class="cap-thumb" src="${c.screenshot}" alt="">`
-      : `<div class="cap-thumb-placeholder">${isPending ? 'capturing…' : (status === 'failed' ? 'failed' : 'no screenshot')}</div>`
-    const badge = status === 'tee' ? '<span class="cap-status-badge tee">TEE</span>'
-                : isPending ? `<span class="cap-status-badge ${status}">${status}</span>`
-                : status === 'failed' ? '<span class="cap-status-badge failed">failed</span>'
-                : ''
+      ? `<img class="thumb" src="${c.screenshot}" alt="">`
+      : `<div class="thumb-placeholder">${isPending ? 'capturing…' : (status === 'failed' ? 'failed' : 'no screenshot')}</div>`
+    let badge = ''
+    if (isPending) badge = `<span class="badge ${status}">${status}</span>`
+    else if (status === 'failed') badge = '<span class="badge failed">failed</span>'
+    else if (c.method === 'tee') badge = '<span class="badge tee">TEE</span>'
+    else if (c.method === 'github') badge = '<span class="badge github">GitHub</span>'
     return `
-      <div class="cap-card ${status}" data-idx="${idx}">
+      <div class="card ${status}" data-idx="${idx}">
+        ${badge}
         ${thumb}
-        <div class="cap-info">
-          <div class="cap-domain">${c.domain || '?'}${badge}</div>
-          <div class="cap-meta">${c.identity || c.method || ''} · ${timeAgo(c.timestamp || c.startTime)}</div>
-          ${c.error ? `<div class="cap-error">${c.error}</div>` : ''}
+        <div class="info">
+          <div class="domain">${c.domain || '?'}</div>
+          <div class="meta">${c.identity || c.method || ''} · ${timeAgo(c.timestamp || c.startTime)}</div>
+          ${c.error ? `<div class="err">${c.error}</div>` : ''}
         </div>
       </div>
     `
   }).join('')
-  grid.querySelectorAll('.cap-card').forEach(card => {
+  grid.querySelectorAll('.card').forEach(card => {
     card.addEventListener('click', () => {
       const i = parseInt(card.dataset.idx)
       const c = loginHistory[i]
       if (c.status === 'pending' || c.status === 'running') {
+        // Re-open the live status tab
         const url = chrome.runtime.getURL('status.html') +
           `?run=${c.runId}&repo=${encodeURIComponent(c.repo)}&url=${encodeURIComponent(c.url || '')}`
         chrome.tabs.create({ url })
       } else {
-        openCapModal(i)
+        openModal(i)
       }
     })
   })
 }
 
-function openCapModal(i) {
+function openModal(i) {
   modalIdx = i
   const c = cachedHistory[i]
-  $('capModalImg').src = c.screenshot || ''
-  $('capModalImg').style.display = c.screenshot ? 'block' : 'none'
-  $('capModalDomain').textContent = c.domain || '?'
-  $('capModalUrl').textContent = c.url ? `URL: ${c.url}` : ''
-  $('capModalTime').textContent = `Captured: ${new Date(c.timestamp || c.startTime || Date.now()).toLocaleString()}`
-  $('capModalRunUrl').innerHTML = c.runUrl ? `Run: <a href="${c.runUrl}" target="_blank">${c.runUrl}</a>` : ''
-  $('capModalIdentity').textContent = c.identity ? `Identity: ${c.identity}` : ''
-  $('capModalRun').href = c.runUrl || '#'
-  $('capModalRun').style.display = c.runUrl ? 'inline-block' : 'none'
-  $('capModalCert').style.display = c.certificate ? 'inline-block' : 'none'
-  $('capModal').classList.add('open')
+  $('modalImg').src = c.screenshot || ''
+  $('modalImg').style.display = c.screenshot ? 'block' : 'none'
+  $('modalDomain').textContent = c.domain || '?'
+  $('modalUrl').textContent = c.url ? `URL: ${c.url}` : ''
+  $('modalTime').textContent = `Captured: ${new Date(c.timestamp || c.startTime || Date.now()).toLocaleString()}`
+  $('modalRunUrl').innerHTML = c.runUrl ? `Run: <a href="${c.runUrl}" target="_blank">${c.runUrl}</a>` : ''
+  $('modalIdentity').textContent = c.identity ? `Identity: ${c.identity}` : ''
+  $('modalRun').href = c.runUrl || '#'
+  $('modalRun').style.display = c.runUrl ? 'inline-block' : 'none'
+  $('modalCert').style.display = c.certificate ? 'inline-block' : 'none'
+  $('modal').classList.add('open')
 }
 
-$('capModalClose').addEventListener('click', () => $('capModal').classList.remove('open'))
-$('capModal').addEventListener('click', e => { if (e.target === $('capModal')) $('capModal').classList.remove('open') })
-document.addEventListener('keydown', e => { if (e.key === 'Escape') $('capModal').classList.remove('open') })
-$('capModalCert').addEventListener('click', () => {
+$('modalClose').addEventListener('click', () => $('modal').classList.remove('open'))
+$('modal').addEventListener('click', e => { if (e.target === $('modal')) $('modal').classList.remove('open') })
+document.addEventListener('keydown', e => { if (e.key === 'Escape') $('modal').classList.remove('open') })
+
+$('modalCert').addEventListener('click', () => {
   const c = cachedHistory[modalIdx]
   if (!c?.certificate) return
   const blob = new Blob([JSON.stringify(c.certificate, null, 2)], { type: 'application/json' })
   window.open(URL.createObjectURL(blob), '_blank')
 })
-$('capModalDelete').addEventListener('click', async () => {
+
+$('modalDelete').addEventListener('click', async () => {
   const { loginHistory = [] } = await chrome.storage.local.get('loginHistory')
   loginHistory.splice(modalIdx, 1)
   await chrome.storage.local.set({ loginHistory })
-  $('capModal').classList.remove('open')
-  renderCaptures()
+  $('modal').classList.remove('open')
 })
 
-// Live updates: re-render whenever loginHistory changes (status.js writes to it)
+// Clear broken: drop github captures that are stuck pending/running/failed,
+// or that completed without a screenshot. TEE captures are kept untouched.
+$('clearBrokenBtn').addEventListener('click', async () => {
+  const { loginHistory = [] } = await chrome.storage.local.get('loginHistory')
+  const before = loginHistory.length
+  const kept = loginHistory.filter(c => {
+    if (c.method === 'tee') return true
+    if (c.method === 'github') {
+      if (c.status === 'pending' || c.status === 'running' || c.status === 'failed') return false
+      if (!c.screenshot) return false
+      return true
+    }
+    return true
+  })
+  const removed = before - kept.length
+  if (removed === 0) {
+    alert('No broken captures to clear.')
+    return
+  }
+  if (!confirm(`Remove ${removed} broken capture${removed === 1 ? '' : 's'}?`)) return
+  await chrome.storage.local.set({ loginHistory: kept })
+})
+
+// Live updates: re-render whenever loginHistory changes
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.loginHistory) renderCaptures()
 })
