@@ -2,105 +2,99 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>Login with Everything</title>
+<title>Login with Everything — Captures</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: system-ui; background: #fafafa; color: #333; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-  .topbar { display: flex; align-items: center; justify-content: space-between; padding: 10px 20px; background: white; border-bottom: 1px solid #e5e5e5; }
-  .topbar h1 { font-size: 16px; color: #2255cc; }
-  .topbar .controls { display: flex; gap: 8px; align-items: center; font-size: 12px; }
-  .topbar input { padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px; font-family: monospace; width: 300px; }
-  .topbar button { padding: 4px 12px; border: none; border-radius: 4px; font-size: 12px; cursor: pointer; background: #2255cc; color: white; }
-  .topbar button:hover { background: #1a44aa; }
-  .topbar button.secondary { background: #eee; color: #333; }
-  .topbar .status { font-size: 11px; color: #999; }
-  .layout { display: flex; flex: 1; min-height: 0; }
-  .panel { flex: 1; display: flex; flex-direction: column; }
-  .panel iframe { flex: 1; border: none; }
-  .panel-header { padding: 6px 12px; background: #f5f5f5; border-bottom: 1px solid #e5e5e5; font-size: 12px; color: #666; display: flex; justify-content: space-between; align-items: center; }
-  .divider { width: 4px; background: #e5e5e5; cursor: col-resize; }
-  .inject-bar { padding: 8px 12px; background: #fff; border-bottom: 1px solid #e5e5e5; display: flex; gap: 6px; align-items: center; font-size: 12px; }
-  .inject-bar input { flex: 1; padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px; }
-  .inject-bar button { padding: 4px 10px; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; }
-  .inject-bar .btn-inject { background: #2255cc; color: white; }
-  .inject-bar .btn-nav { background: #eee; color: #333; }
-  #injectStatus { font-size: 11px; color: #999; }
-
-  /* Captures strip */
-  .captures-bar {
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     background: #1a1a2e;
     color: #eee;
-    padding: 10px 16px;
-    border-top: 1px solid #2a2a4a;
-    max-height: 220px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    white-space: nowrap;
-    flex-shrink: 0;
+    min-height: 100vh;
   }
-  .captures-bar h2 {
-    font-size: 12px;
-    color: #888;
-    margin-bottom: 8px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    font-weight: 600;
-  }
-  .captures-empty { font-size: 12px; color: #555; padding: 4px 0; }
-  .captures-grid { display: inline-flex; gap: 12px; align-items: stretch; }
-  .cap-card {
-    display: inline-block;
-    width: 220px;
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 24px;
     background: #16213e;
-    border-radius: 8px;
+    border-bottom: 1px solid #0f3460;
+  }
+  .topbar h1 { font-size: 18px; color: #4ecca3; font-weight: 600; }
+  .topbar .controls { display: flex; gap: 8px; align-items: center; }
+  .btn {
+    padding: 6px 14px; border: 1px solid #0f3460; border-radius: 6px;
+    background: #1a1a2e; color: #eee; font-size: 12px; cursor: pointer;
+    text-decoration: none; display: inline-block;
+  }
+  .btn:hover { background: #2a2a4a; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn.primary { background: #4ecca3; color: #1a1a2e; border-color: #4ecca3; font-weight: 600; }
+  .btn.primary:hover { background: #3db892; }
+  .btn.danger { color: #ff6b6b; }
+  .btn.danger:hover { background: #4a1a2e; }
+
+  main { padding: 24px; max-width: 1400px; margin: 0 auto; }
+  .empty {
+    text-align: center;
+    padding: 80px 24px;
+    color: #888;
+  }
+  .empty h2 { font-size: 18px; color: #aaa; margin-bottom: 8px; }
+  .empty p { font-size: 13px; line-height: 1.6; max-width: 480px; margin: 0 auto; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+  }
+  .card {
+    background: #16213e;
+    border-radius: 12px;
     overflow: hidden;
     cursor: pointer;
     border: 2px solid transparent;
     transition: transform 0.15s;
+    position: relative;
   }
-  .cap-card:hover { transform: translateY(-2px); }
-  .cap-card.pending, .cap-card.running { border-color: #5dade2; animation: cap-pulse 2s infinite; }
-  .cap-card.failed { border-color: #ff6b6b; }
-  @keyframes cap-pulse {
+  .card:hover { transform: translateY(-2px); }
+  .card.pending, .card.running { border-color: #5dade2; animation: pulse-border 2s infinite; }
+  .card.failed { border-color: #ff6b6b; }
+  @keyframes pulse-border {
     0%, 100% { border-color: #5dade2; }
     50%      { border-color: #1a3a5a; }
   }
-  .cap-thumb {
-    width: 100%;
-    height: 110px;
+  .badge {
+    position: absolute;
+    top: 8px; right: 8px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .badge.pending, .badge.running { background: #1a3a5a; color: #5dade2; }
+  .badge.failed { background: #4a1a2e; color: #ff6b6b; }
+  .badge.tee { background: #1a4a2e; color: #4ecca3; }
+  .badge.github { background: #2a2a4a; color: #aaa; }
+
+  .thumb {
+    width: 100%; height: 180px;
     object-fit: cover;
     background: #0f3460;
     display: block;
   }
-  .cap-thumb-placeholder {
-    width: 100%;
-    height: 110px;
+  .thumb-placeholder {
+    width: 100%; height: 180px;
     background: #0f3460;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #5dade2;
-    font-size: 11px;
+    display: flex; align-items: center; justify-content: center;
+    color: #5dade2; font-size: 13px;
   }
-  .cap-info { padding: 8px 10px; }
-  .cap-domain { font-size: 12px; color: #4ecca3; font-weight: 600; }
-  .cap-meta { font-size: 10px; color: #888; margin-top: 2px; }
-  .cap-error { font-size: 10px; color: #ff6b6b; margin-top: 2px; }
-  .cap-status-badge {
-    display: inline-block;
-    padding: 1px 6px;
-    border-radius: 3px;
-    font-size: 9px;
-    font-weight: 700;
-    text-transform: uppercase;
-    margin-left: 4px;
-  }
-  .cap-status-badge.pending, .cap-status-badge.running { background: #1a3a5a; color: #5dade2; }
-  .cap-status-badge.failed { background: #4a1a2e; color: #ff6b6b; }
-  .cap-status-badge.tee { background: #1a4a2e; color: #4ecca3; }
+  .info { padding: 14px 16px; }
+  .domain { font-size: 14px; color: #4ecca3; font-weight: 600; word-break: break-all; }
+  .meta { font-size: 11px; color: #888; margin-top: 4px; }
+  .err { font-size: 11px; color: #ff6b6b; margin-top: 4px; }
 
   /* Modal */
-  .cap-modal {
+  .modal {
     display: none;
     position: fixed; inset: 0;
     background: rgba(0,0,0,0.92);
@@ -108,91 +102,68 @@
     padding: 32px;
     overflow: auto;
   }
-  .cap-modal.open { display: block; }
-  .cap-modal-content { max-width: 1100px; margin: 0 auto; color: #eee; }
-  .cap-modal-close {
+  .modal.open { display: block; }
+  .modal-content { max-width: 1100px; margin: 0 auto; }
+  .modal-close {
     position: fixed; top: 16px; right: 16px;
     background: none; border: none; color: #888;
-    font-size: 28px; cursor: pointer;
+    font-size: 32px; cursor: pointer;
   }
-  .cap-modal-close:hover { color: #fff; }
-  .cap-modal-img { width: 100%; border-radius: 8px; margin-bottom: 16px; }
-  .cap-modal-meta {
+  .modal-close:hover { color: #fff; }
+  .modal-img { width: 100%; border-radius: 8px; margin-bottom: 16px; }
+  .modal-meta {
     background: #16213e; padding: 16px; border-radius: 8px;
-    margin-bottom: 16px; font-size: 13px;
+    margin-bottom: 16px;
   }
-  .cap-modal-meta h3 { font-size: 14px; color: #4ecca3; margin-bottom: 8px; }
-  .cap-modal-meta p { color: #aaa; margin-bottom: 4px; word-break: break-all; }
-  .cap-modal-meta a { color: #5dade2; }
-  .cap-modal-btns button, .cap-modal-btns a {
-    padding: 8px 14px; margin-right: 8px; border-radius: 6px;
-    font-size: 12px; font-weight: 600; cursor: pointer;
-    border: none; text-decoration: none; display: inline-block;
-  }
-  .cap-modal-btns .primary { background: #4ecca3; color: #1a1a2e; }
-  .cap-modal-btns .secondary { background: #2a2a4a; color: #eee; }
+  .modal-meta h3 { font-size: 16px; color: #4ecca3; margin-bottom: 12px; word-break: break-all; }
+  .modal-meta p { font-size: 12px; color: #aaa; margin-bottom: 6px; word-break: break-all; }
+  .modal-meta a { color: #5dade2; text-decoration: none; }
+  .modal-meta a:hover { text-decoration: underline; }
+  .modal-btns { display: flex; gap: 8px; flex-wrap: wrap; }
 </style>
 </head>
 <body>
   <div class="topbar">
     <h1>Login with Everything</h1>
     <div class="controls">
-      <label style="color:#999">Forum:</label>
-      <input id="forumUrl" placeholder="https://your-tee-3003.dstack...">
-      <button id="saveUrl">Save</button>
-      <button class="secondary" id="openForum">Open in tab</button>
-      <span class="status" id="connStatus"></span>
-    </div>
-  </div>
-  <div class="inject-bar">
-    <input id="injectDomain" placeholder="reddit.com">
-    <button class="btn-inject" id="btnInject">Inject Cookies</button>
-    <button class="btn-nav" id="btnNav">Navigate</button>
-    <input id="navUrl" placeholder="https://www.reddit.com/api/me.json" style="width:250px;">
-    <button class="btn-nav" id="btnNavGo">Go</button>
-    <span id="injectStatus"></span>
-  </div>
-  <div class="layout">
-    <div class="panel" id="forumPanel">
-      <div class="panel-header">
-        <span>Forum</span>
-      </div>
-      <iframe id="forumFrame" src="about:blank"></iframe>
-    </div>
-    <div class="divider"></div>
-    <div class="panel" id="nekoPanel">
-      <div class="panel-header">
-        <span>TEE Browser</span>
-        <button style="font-size:11px;padding:2px 8px;border:1px solid #ddd;border-radius:3px;background:white;cursor:pointer" id="toggleNeko">Hide</button>
-      </div>
-      <iframe id="nekoFrame" src="about:blank"></iframe>
+      <button class="btn" id="openForumBtn">Open Forum</button>
+      <button class="btn" id="openNekoBtn">Open TEE Browser</button>
+      <button class="btn danger" id="clearBrokenBtn" title="Remove failed, pending, and screenshot-less github captures">Clear broken</button>
     </div>
   </div>
 
-  <div class="captures-bar">
-    <h2>Captures</h2>
-    <div class="captures-grid" id="capturesGrid"></div>
-    <div class="captures-empty" id="capturesEmpty">No captures yet — verify a site to see one here.</div>
-  </div>
+  <main>
+    <div class="grid" id="grid"></div>
+    <div class="empty" id="empty">
+      <h2>No captures yet</h2>
+      <p>
+        Click the extension icon and use <strong>Verify via TEE</strong> or
+        <strong>Verify via GitHub Actions</strong> on a tab where you're logged
+        in. Captures will show up here with their screenshot, certificate, and
+        a link to the run.
+      </p>
+    </div>
+  </main>
 
-  <div class="cap-modal" id="capModal">
-    <button class="cap-modal-close" id="capModalClose">&times;</button>
-    <div class="cap-modal-content">
-      <img class="cap-modal-img" id="capModalImg" src="">
-      <div class="cap-modal-meta">
-        <h3 id="capModalDomain"></h3>
-        <p id="capModalUrl"></p>
-        <p id="capModalTime"></p>
-        <p id="capModalRunUrl"></p>
-        <p id="capModalIdentity"></p>
+  <div class="modal" id="modal">
+    <button class="modal-close" id="modalClose">&times;</button>
+    <div class="modal-content">
+      <img class="modal-img" id="modalImg" src="">
+      <div class="modal-meta">
+        <h3 id="modalDomain"></h3>
+        <p id="modalUrl"></p>
+        <p id="modalTime"></p>
+        <p id="modalRunUrl"></p>
+        <p id="modalIdentity"></p>
       </div>
-      <div class="cap-modal-btns">
-        <button class="primary" id="capModalCert">View certificate JSON</button>
-        <a class="secondary" id="capModalRun" href="#" target="_blank">Open run on GitHub</a>
-        <button class="secondary" id="capModalDelete">Delete</button>
+      <div class="modal-btns">
+        <button class="btn primary" id="modalCert">View certificate JSON</button>
+        <a class="btn" id="modalRun" href="#" target="_blank">Open run on GitHub</a>
+        <button class="btn danger" id="modalDelete">Delete</button>
       </div>
     </div>
   </div>
+
   <script src="dashboard.js"></script>
 </body>
 </html>
