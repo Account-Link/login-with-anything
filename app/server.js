@@ -255,8 +255,10 @@ app.post('/api/verify-cookie', async (req, res) => {
     verifyUrl = `https://x.com/${username}`
     extractIdentity = (json, pageText) => ({ identity: username, evidence: 'Session verified' })
   } else {
-    verifyUrl = `https://${domain}`
-    extractIdentity = (json, pageText) => ({ identity: username, evidence: 'Session verified' })
+    // Generic site: use site as full URL if provided, otherwise homepage.
+    // This lets custom boards set site to e.g. "https://www.amazon.com/cart"
+    verifyUrl = site.startsWith('http') ? site : `https://${domain}`
+    extractIdentity = null  // signals Claude+vision analysis below
   }
 
   try {
@@ -292,9 +294,31 @@ app.post('/api/verify-cookie', async (req, res) => {
       }
 
       let r = null
-      if (evalData?.json) r = extractIdentity(evalData.json, pageText)
-      if (!r) r = extractIdentity(null, pageText)
-      if (!r) throw new Error('Verification failed — could not extract identity from page')
+      if (extractIdentity) {
+        if (evalData?.json) r = extractIdentity(evalData.json, pageText)
+        if (!r) r = extractIdentity(null, pageText)
+        if (!r) throw new Error('Verification failed — could not extract identity from page')
+      } else {
+        // Generic site — Claude+vision analyzes the page against the board's predicate
+        if (!anthropic) return { identity: username || 'user', evidence: 'Session verified' }
+        const shotRes = await fetch(`${TEE_BROWSER}/screenshot`)
+        const shotB64 = shotRes.ok ? Buffer.from(await shotRes.arrayBuffer()).toString('base64') : null
+        const content = [
+          { type: 'text', text: `Verify this claim about the logged-in user: "${board.predicate}"\nPage title: ${pageTitle}\nPage text:\n${pageText.slice(0, 2000)}` }
+        ]
+        if (shotB64) content.push({ type: 'image', source: { type: 'base64', media_type: 'image/png', data: shotB64 } })
+        const msg = await anthropic.messages.create({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 512,
+          system: 'You analyze a captured web page (text + screenshot) to verify a specific claim about the logged-in user. The page was rendered in a TEE browser with their session cookies. Return ONLY valid JSON: { "success": boolean, "identity": "extracted user identity or username", "evidence": "specific details from the page supporting or refuting the claim" }',
+          messages: [{ role: 'user', content }]
+        })
+        const txt = msg.content[0].text.replace(/^```\w*\n?/, '').replace(/\n?```$/, '').trim()
+        let a
+        try { a = JSON.parse(txt) } catch { a = { success: true, identity: username || 'user', evidence: txt } }
+        if (!a.success) throw new Error(a.evidence || 'Claim could not be verified from the page')
+        r = { identity: a.identity || username || 'user', evidence: a.evidence }
+      }
       return r
     })
 
