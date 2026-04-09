@@ -224,14 +224,29 @@ app.post('/api/verify-cookie', async (req, res) => {
       return { identity: d.name, evidence: `${d.total_karma} karma, account since ${new Date(d.created_utc * 1000).getFullYear()}` }
     }
   } else if (site.includes('nytimes')) {
-    verifyUrl = 'https://www.nytimes.com/games/wordle'
-    extractIdentity = (json, pageText) => {
-      if (!pageText) return null
-      const solved = pageText.includes('Great job on today') || pageText.includes('Hi Wordler')
-      if (!solved) return null
-      const numMatch = pageText.match(/No\.\s*(\d+)/)
-      const puzzleNum = numMatch ? numMatch[1] : '?'
-      return { identity: `wordler-${username || 'anon'}`, evidence: `Solved Wordle #${puzzleNum} today` }
+    // Navigate to NYT's wordle state JSON endpoint instead of the splash page.
+    // The bridge's evalScript will JSON.parse the body and we get authoritative
+    // stats with the user's session cookie. Way more reliable than scraping the
+    // splash page text, which only contains "Go ahead, add another day to your
+    // N day streak" — never the post-solve "Great job on today" we used to look for.
+    verifyUrl = 'https://www.nytimes.com/svc/games/state/wordleV2/latests'
+    extractIdentity = (json) => {
+      if (!json?.user_id) return null
+      const stats = json?.player?.stats?.wordle?.calculatedStats || {}
+      const total = json?.player?.stats?.wordle?.totalStats || {}
+      if (!stats.hasPlayed) {
+        throw new Error('This NYT account has never played Wordle.')
+      }
+      // NYT puzzle dates roll over at midnight ET, not UTC.
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
+      if (stats.lastCompletedPrintDate !== today) {
+        throw new Error(`Last solved Wordle on ${stats.lastCompletedPrintDate}, but today (${today}) hasn't been done yet. Go finish today's puzzle and try again.`)
+      }
+      const accountYear = (json.player?.account_creation_date || '').slice(0, 4)
+      return {
+        identity: `nyt-${json.user_id}`,
+        evidence: `Solved Wordle ${stats.lastCompletedPrintDate}, ${stats.currentStreak}-day streak (max ${stats.maxStreak}), ${total.gamesWon}/${total.gamesPlayed} lifetime${accountYear ? `, NYT account since ${accountYear}` : ''}`
+      }
     }
   } else if (site.includes('twitter') || site.includes('x.com')) {
     verifyUrl = `https://x.com/${username}`
