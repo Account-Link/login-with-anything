@@ -231,6 +231,9 @@ app.post('/api/verify-cookie', async (req, res) => {
     // N day streak" — never the post-solve "Great job on today" we used to look for.
     verifyUrl = 'https://www.nytimes.com/svc/games/state/wordleV2/latests'
     extractIdentity = (json) => {
+      if (json?.error === 'forbidden' || json?.error === 'unauthorized' || json?.code === 401) {
+        throw new Error("NYT rejected the cookies (got 'forbidden'). Make sure the extension has permission for nytimes.com AND that you're logged into nytimes.com in this browser. Check chrome://extensions → details → site access.")
+      }
       if (!json?.user_id) return null
       const stats = json?.player?.stats?.wordle?.calculatedStats || {}
       const total = json?.player?.stats?.wordle?.totalStats || {}
