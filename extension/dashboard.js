@@ -106,6 +106,20 @@ function openModal(i) {
   $('modalRun').href = c.runUrl || '#'
   $('modalRun').style.display = c.runUrl ? 'inline-block' : 'none'
   $('modalCert').style.display = c.certificate ? 'inline-block' : 'none'
+  // Show "View status page" if we have a runId (can re-open the step view)
+  const statusBtn = document.getElementById('modalStatus')
+  if (statusBtn) {
+    if (c.runId && c.repo) {
+      statusBtn.style.display = 'inline-block'
+      statusBtn.onclick = () => {
+        const url = chrome.runtime.getURL('status.html') +
+          `?run=${c.runId}&repo=${encodeURIComponent(c.repo)}&url=${encodeURIComponent(c.url || '')}`
+        chrome.tabs.create({ url })
+      }
+    } else {
+      statusBtn.style.display = 'none'
+    }
+  }
   $('modal').classList.add('open')
 }
 

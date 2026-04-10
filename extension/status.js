@@ -74,7 +74,7 @@ async function poll() {
       }
       if (gistId) await deleteGist()
     } else {
-      setTimeout(poll, 3000)
+      setTimeout(poll, 1500)
     }
   } catch (err) {
     await upsertCapture({ runId, status: 'failed', error: err.message })
@@ -114,7 +114,6 @@ function updateStatus(run) {
     icon.textContent = '...'
     title.textContent = 'Capturing'
     subtitle.textContent = 'Workflow in progress'
-    fetchJobs().then(updateSteps)
   } else if (run.status === 'completed') {
     if (run.conclusion === 'success') {
       icon.classList.add('success')
@@ -127,8 +126,10 @@ function updateStatus(run) {
       title.textContent = 'Failed'
       subtitle.textContent = `Conclusion: ${run.conclusion}`
     }
-    fetchJobs().then(updateSteps)
   }
+  // Always fetch steps — not just on state transitions — so progress
+  // appears gradually instead of jumping from all-pending to all-done.
+  fetchJobs().then(updateSteps)
 }
 
 function updateSteps(data) {
