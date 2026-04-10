@@ -254,8 +254,8 @@ app.post('/api/verify-cookie', async (req, res) => {
       }
       const accountYear = (json.player?.account_creation_date || '').slice(0, 4)
       return {
-        identity: `nyt-${json.user_id}`,
-        evidence: `Solved Wordle ${stats.lastCompletedPrintDate}, ${stats.currentStreak}-day streak (max ${stats.maxStreak}), ${total.gamesWon}/${total.gamesPlayed} lifetime${accountYear ? `, NYT account since ${accountYear}` : ''}`
+        identity: `Wordler #${json.user_id}`,
+        evidence: `Solved ${stats.lastCompletedPrintDate}, ${stats.currentStreak}-day streak (max ${stats.maxStreak}), ${total.gamesWon} wins in ${total.gamesPlayed} games${accountYear ? `, NYT since ${accountYear}` : ''}`
       }
     }
   } else if (site.includes('twitter') || site.includes('x.com')) {
