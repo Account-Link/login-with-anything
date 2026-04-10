@@ -26,7 +26,8 @@ window.addEventListener('message', async (event) => {
     try {
       // 1. Dispatch GitHub Actions (opens status tab with live steps)
       const res = await chrome.runtime.sendMessage({
-        type: 'verifyViaGitHub', domain, forumUrl: window.location.origin
+        type: 'verifyViaGitHub', domain, forumUrl: window.location.origin,
+        verifyUrl: event.data.verifyUrl
       })
       if (res?.error) {
         window.postMessage({ type: 'lwa-github-error', error: res.error, domain }, '*')

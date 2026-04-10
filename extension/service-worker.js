@@ -63,7 +63,7 @@ async function verifyViaTEE({ domain, forumUrl, boardId }) {
   return data
 }
 
-async function verifyViaGitHub({ domain, forumUrl, boardId }) {
+async function verifyViaGitHub({ domain, forumUrl, boardId, verifyUrl }) {
   const { settings } = await chrome.storage.local.get('settings')
   const ghToken = settings?.ghToken
   const repo = settings?.ghRepo
@@ -89,14 +89,14 @@ async function verifyViaGitHub({ domain, forumUrl, boardId }) {
   // Dispatch workflow
   const dispatchRes = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/verify.yml/dispatches`, {
     method: 'POST', headers,
-    body: JSON.stringify({ ref: 'main', inputs: { domain, gist_id: gist.id } })
+    body: JSON.stringify({ ref: 'main', inputs: { domain, gist_id: gist.id, ...(verifyUrl ? { url: verifyUrl } : {}) } })
   })
   if (!dispatchRes.ok) throw new Error(`Workflow dispatch failed: ${dispatchRes.status}`)
 
   // Find the new run id (workflow_dispatch returns 204 with no body, so poll briefly)
   let runId = null
-  for (let i = 0; i < 6; i++) {
-    await new Promise(r => setTimeout(r, 1500))
+  for (let i = 0; i < 10; i++) {
+    await new Promise(r => setTimeout(r, 2000))
     const runsRes = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/verify.yml/runs?per_page=1&event=workflow_dispatch`, { headers })
     const runs = await runsRes.json()
     const run = runs.workflow_runs?.[0]

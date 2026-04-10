@@ -450,7 +450,7 @@
       try { domain = new URL(currentBoard.site).hostname.replace(/^www\./, '') } catch { domain = currentBoard.site.replace(/^www\./, '') }
 
       setStatus('wait', `Grabbing ${domain} cookies and dispatching GitHub Actions... (takes ~15s)`)
-      window.postMessage({ type: 'lwa-request-github-verify', domain, boardId: currentBoard.id }, '*')
+      window.postMessage({ type: 'lwa-request-github-verify', domain, boardId: currentBoard.id, verifyUrl: currentBoard.site?.startsWith('http') ? currentBoard.site : undefined }, '*')
 
       function handler(event) {
         if (event.data?.type === 'lwa-github-error' && event.data.domain === domain) {

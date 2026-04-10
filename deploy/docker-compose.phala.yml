@@ -61,7 +61,7 @@ services:
       timeout: 5s
 
   app:
-    image: ghcr.io/amiller/login-with-anything-app@sha256:7dfed38da75ff77c52b2761c2d948aa57c890541fa3aac2f173a778354ffb200
+    image: ghcr.io/amiller/login-with-anything-app@sha256:9a4e66db4449b5775d24dbcdc97b8289179ef8a8adc4a1d7dd9f599ee3ff4c35
     depends_on:
       browser:
         condition: service_healthy

@@ -15,6 +15,9 @@ on:
       gist_id:
         description: 'Gist ID containing session.json with cookies'
         required: true
+      url:
+        description: 'Full URL to navigate (overrides domain default, e.g. https://www.amazon.com/cart)'
+        required: false
 
 permissions:
   contents: read
@@ -104,15 +107,20 @@ jobs:
       - name: Determine target URL
         id: target
         run: |
-          DOMAIN="${{ inputs.domain }}"
-          case "$DOMAIN" in
-            *reddit*)              URL="https://www.reddit.com/" ;;
-            *nytimes*|*wordle*)    URL="https://www.nytimes.com/games/wordle" ;;
-            *twitter*|*x.com*)     URL="https://x.com/home" ;;
-            *github.com*)          URL="https://github.com/" ;;
-            *anthropic*)           URL="https://console.anthropic.com/" ;;
-            *)                     URL="https://${DOMAIN}/" ;;
-          esac
+          # Use explicit URL input if provided (e.g. https://www.amazon.com/cart)
+          if [ -n "${{ inputs.url }}" ]; then
+            URL="${{ inputs.url }}"
+          else
+            DOMAIN="${{ inputs.domain }}"
+            case "$DOMAIN" in
+              *reddit*)              URL="https://www.reddit.com/" ;;
+              *nytimes*|*wordle*)    URL="https://www.nytimes.com/games/wordle" ;;
+              *twitter*|*x.com*)     URL="https://x.com/home" ;;
+              *github.com*)          URL="https://github.com/" ;;
+              *anthropic*)           URL="https://console.anthropic.com/" ;;
+              *)                     URL="https://${DOMAIN}/" ;;
+            esac
+          fi
           echo "url=$URL" >> "$GITHUB_OUTPUT"
           echo "Target: $URL"
 
