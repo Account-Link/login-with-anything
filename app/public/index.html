@@ -321,7 +321,10 @@
         })()
         const extBtn = extensionInstalled ? `
           <button onclick="verifyWithExtension()" style="width:100%; background:#4ecca3; border-color:#4ecca3; font-weight:600; margin-bottom:0.5rem;">
-            Login with Extension (${esc(siteDomain)})
+            Login with Extension — TEE (${esc(siteDomain)})
+          </button>
+          <button onclick="verifyWithGitHub()" style="width:100%; background:#1a3a5a; border-color:#1a3a5a; color:#5dade2; font-weight:600; margin-bottom:0.5rem;">
+            Login with Extension — GitHub Actions (${esc(siteDomain)})
           </button>
           <details style="margin-bottom:0.5rem;">
             <summary style="color:#8b949e; font-size:0.8rem; cursor:pointer;">Or paste cookie manually</summary>` : ''
@@ -438,6 +441,39 @@
         setStatus('ok', 'Verified!')
       } else {
         setStatus('err', data.error || 'Verification failed')
+      }
+    }
+
+    async function verifyWithGitHub() {
+      if (!currentBoard) return
+      let domain
+      try { domain = new URL(currentBoard.site).hostname.replace(/^www\./, '') } catch { domain = currentBoard.site.replace(/^www\./, '') }
+
+      setStatus('wait', `Dispatching GitHub Actions workflow for ${domain}...`)
+      window.postMessage({ type: 'lwa-request-github-verify', domain }, '*')
+
+      // Listen for the result (the extension opens a status tab with live steps)
+      const result = await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Extension did not respond')), 15000)
+        function handler(event) {
+          if (event.data?.type === 'lwa-github-result') {
+            clearTimeout(timeout)
+            window.removeEventListener('message', handler)
+            resolve(event.data.result)
+          }
+          if (event.data?.type === 'lwa-github-error') {
+            clearTimeout(timeout)
+            window.removeEventListener('message', handler)
+            reject(new Error(event.data.error))
+          }
+        }
+        window.addEventListener('message', handler)
+      })
+
+      if (result?.error) {
+        setStatus('err', result.error)
+      } else {
+        setStatus('ok', `Dispatched run #${result.runId || '?'} — check the status tab for live progress`)
       }
     }
 

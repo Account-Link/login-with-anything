@@ -9,15 +9,26 @@ window.postMessage({ type: 'lwa-extension-installed' }, '*')
 
 window.addEventListener('message', async (event) => {
   if (event.source !== window) return
-  if (event.data?.type !== 'lwa-request-cookies') return
 
-  const domain = event.data.domain
-  try {
-    // Ask the service worker to grab cookies for the domain.
-    // This reuses the existing getCookies handler in service-worker.js.
-    const cookies = await chrome.runtime.sendMessage({ type: 'getCookies', domain })
-    window.postMessage({ type: 'lwa-cookies', cookies, domain }, '*')
-  } catch (e) {
-    window.postMessage({ type: 'lwa-cookies-error', error: e.message, domain }, '*')
+  if (event.data?.type === 'lwa-request-cookies') {
+    const domain = event.data.domain
+    try {
+      const cookies = await chrome.runtime.sendMessage({ type: 'getCookies', domain })
+      window.postMessage({ type: 'lwa-cookies', cookies, domain }, '*')
+    } catch (e) {
+      window.postMessage({ type: 'lwa-cookies-error', error: e.message, domain }, '*')
+    }
+  }
+
+  if (event.data?.type === 'lwa-request-github-verify') {
+    const domain = event.data.domain
+    try {
+      const res = await chrome.runtime.sendMessage({
+        type: 'verifyViaGitHub', domain, forumUrl: window.location.origin
+      })
+      window.postMessage({ type: 'lwa-github-result', result: res, domain }, '*')
+    } catch (e) {
+      window.postMessage({ type: 'lwa-github-error', error: e.message, domain }, '*')
+    }
   }
 })
