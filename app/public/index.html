@@ -169,6 +169,18 @@
     let sessionIdentity = null
     let sessionEvidence = null
 
+    // --- Extension detection ---
+    let extensionInstalled = false
+    const SEED_BOARD_NAMES = ['Anthropic Customers', 'GitHub Developers', 'High Karma Redditors', "Today's Wordle"]
+
+    window.addEventListener('message', (event) => {
+      if (event.data?.type === 'lwa-extension-installed') {
+        extensionInstalled = true
+        // Re-render login method if a board is open
+        if (currentBoard && currentBoard.method === 'browser') renderLoginMethod()
+      }
+    })
+
     // --- localStorage persistence ---
     function getSavedSessions() {
       try { return JSON.parse(localStorage.getItem('lwa-sessions') || '{}') } catch { return {} }
@@ -197,9 +209,10 @@
       el.innerHTML = boards.map(b => {
         const s = saved[b.id]
         const loggedIn = s ? `<span class="flair">logged in as ${esc(s.identity)}</span>` : ''
+        const isSeed = SEED_BOARD_NAMES.includes(b.name)
         return `
         <div class="board" onclick="openBoard('${b.id}')" style="position:relative">
-          <button class="delete-board" onclick="event.stopPropagation(); deleteBoard('${b.id}', '${esc(b.name)}')" title="Delete board">&times;</button>
+          ${isSeed ? '' : `<button class="delete-board" onclick="event.stopPropagation(); deleteBoard('${b.id}', '${esc(b.name)}')" title="Delete board">&times;</button>`}
           <h3>${esc(b.name)} ${loggedIn}</h3>
           <span class="badge ${b.method}">${b.method === 'api_key' ? 'API Key' : 'Cookie'}</span>
           <span class="predicate">${esc(b.predicate)}</span>
@@ -301,7 +314,20 @@
           <input id="apiKeyInput" type="password" placeholder="Paste your API key or token">
           <button onclick="verifyApiKey()" style="width:100%;">Verify</button>`
       } else {
+        // Extract domain from site (could be full URL like https://www.amazon.com/cart)
+        const siteDomain = (() => {
+          try { return new URL(currentBoard.site).hostname.replace(/^www\./, '') } catch {}
+          return currentBoard.site.replace(/^www\./, '')
+        })()
+        const extBtn = extensionInstalled ? `
+          <button onclick="verifyWithExtension()" style="width:100%; background:#4ecca3; border-color:#4ecca3; font-weight:600; margin-bottom:0.5rem;">
+            Login with Extension (${esc(siteDomain)})
+          </button>
+          <details style="margin-bottom:0.5rem;">
+            <summary style="color:#8b949e; font-size:0.8rem; cursor:pointer;">Or paste cookie manually</summary>` : ''
+        const extEnd = extensionInstalled ? '</details>' : ''
         lm.innerHTML = `
+          ${extBtn}
           <p style="color:#8b949e; font-size:0.9rem; margin-bottom:0.5rem;">
             Open DevTools &rarr; Application &rarr; Cookies &rarr; <code>${esc(currentBoard.site)}</code><br>
             Copy the <code>${esc(defaultCookieName(currentBoard.site))}</code> cookie value and paste it below.
@@ -309,7 +335,8 @@
           <input id="cookieInput" type="password" placeholder="Paste cookie value">
           <input id="cookieName" value="${defaultCookieName(currentBoard.site)}" placeholder="Cookie name" style="font-family:monospace; font-size:0.85rem;">
           <input id="cookieUser" placeholder="Username (optional — auto-detected if possible)">
-          <button onclick="verifyCookie()" style="width:100%;">Verify via TEE</button>`
+          <button onclick="verifyCookie()" style="width:100%;">Verify via TEE</button>
+          ${extEnd}`
       }
     }
 
@@ -349,6 +376,60 @@
       const res = await fetch('/api/verify-cookie', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ boardId: currentBoard.id, cookieName, cookieValue, username: username || 'anon', site: currentBoard.site })
+      })
+      const data = await res.json()
+      if (data.sessionToken) {
+        saveSession(currentBoard.id, data.sessionToken, data.identity, data.evidence)
+        activateSession(data.sessionToken, data.identity, data.evidence)
+        setStatus('ok', 'Verified!')
+      } else {
+        setStatus('err', data.error || 'Verification failed')
+      }
+    }
+
+    async function verifyWithExtension() {
+      if (!currentBoard) return
+      // Extract domain for cookie grab
+      let domain
+      try { domain = new URL(currentBoard.site).hostname } catch { domain = currentBoard.site }
+      domain = domain.replace(/^www\./, '')
+
+      setStatus('wait', `Grabbing ${domain} cookies via extension...`)
+
+      // Request cookies from the extension's content script
+      window.postMessage({ type: 'lwa-request-cookies', domain }, '*')
+
+      // Wait for response
+      const cookies = await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Extension did not respond')), 5000)
+        function handler(event) {
+          if (event.data?.type === 'lwa-cookies' && event.data.domain === domain) {
+            clearTimeout(timeout)
+            window.removeEventListener('message', handler)
+            resolve(event.data.cookies)
+          }
+          if (event.data?.type === 'lwa-cookies-error' && event.data.domain === domain) {
+            clearTimeout(timeout)
+            window.removeEventListener('message', handler)
+            reject(new Error(event.data.error))
+          }
+        }
+        window.addEventListener('message', handler)
+      })
+
+      if (!cookies?.length) { setStatus('err', `No cookies for ${domain}. Are you logged in?`); return }
+      setStatus('wait', `Got ${cookies.length} cookies. Verifying via TEE browser...`)
+
+      // Format cookies for the server
+      const formatted = cookies.map(c => ({
+        name: c.name, value: c.value, domain: c.domain, path: c.path,
+        secure: c.secure, httpOnly: c.httpOnly, sameSite: c.sameSite,
+        expirationDate: c.expirationDate
+      }))
+
+      const res = await fetch('/api/verify-cookie', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ boardId: currentBoard.id, cookies: formatted, site: currentBoard.site })
       })
       const data = await res.json()
       if (data.sessionToken) {
