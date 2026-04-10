@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile_inline: |
         FROM ghcr.io/m1k1o/neko/chromium:latest
-        RUN apt-get update -qq && apt-get install -y -qq scrot && rm -rf /var/lib/apt/lists/*
+        RUN apt-get update -qq && apt-get install -y -qq scrot nodejs npm && rm -rf /var/lib/apt/lists/*
         RUN mkdir -p /etc/chromium/policies/managed
         COPY policies.json /etc/chromium/policies/managed/policies.json
         COPY chromium-test.conf /etc/neko/supervisord/chromium.conf
