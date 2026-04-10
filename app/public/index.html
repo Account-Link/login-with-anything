@@ -444,37 +444,28 @@
       }
     }
 
-    async function verifyWithGitHub() {
+    function verifyWithGitHub() {
       if (!currentBoard) return
       let domain
       try { domain = new URL(currentBoard.site).hostname.replace(/^www\./, '') } catch { domain = currentBoard.site.replace(/^www\./, '') }
 
-      setStatus('wait', `Dispatching GitHub Actions workflow for ${domain}...`)
+      setStatus('wait', `Dispatching GitHub Actions for ${domain}... A status tab will open.`)
       window.postMessage({ type: 'lwa-request-github-verify', domain }, '*')
 
-      // Listen for the result (the extension opens a status tab with live steps)
-      const result = await new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error('Extension did not respond')), 15000)
-        function handler(event) {
-          if (event.data?.type === 'lwa-github-result') {
-            clearTimeout(timeout)
-            window.removeEventListener('message', handler)
-            resolve(event.data.result)
-          }
-          if (event.data?.type === 'lwa-github-error') {
-            clearTimeout(timeout)
-            window.removeEventListener('message', handler)
-            reject(new Error(event.data.error))
-          }
+      // The content script responds immediately and fires the dispatch async.
+      // The service worker opens a status tab with live step streaming.
+      // We just listen for errors.
+      function handler(event) {
+        if (event.data?.type === 'lwa-github-error' && event.data.domain === domain) {
+          setStatus('err', event.data.error)
+          window.removeEventListener('message', handler)
         }
-        window.addEventListener('message', handler)
-      })
-
-      if (result?.error) {
-        setStatus('err', result.error)
-      } else {
-        setStatus('ok', `Dispatched run #${result.runId || '?'} — check the status tab for live progress`)
+        if (event.data?.type === 'lwa-github-result' && event.data.domain === domain) {
+          setStatus('ok', 'Dispatched — see the status tab for live progress')
+          window.removeEventListener('message', handler)
+        }
       }
+      window.addEventListener('message', handler)
     }
 
     function setStatus(type, msg) {
