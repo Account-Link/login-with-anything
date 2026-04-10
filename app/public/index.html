@@ -450,17 +450,28 @@
       try { domain = new URL(currentBoard.site).hostname.replace(/^www\./, '') } catch { domain = currentBoard.site.replace(/^www\./, '') }
 
       setStatus('wait', `Grabbing ${domain} cookies and dispatching GitHub Actions... (takes ~15s)`)
-      window.postMessage({ type: 'lwa-request-github-verify', domain }, '*')
+      window.postMessage({ type: 'lwa-request-github-verify', domain, boardId: currentBoard.id }, '*')
 
       function handler(event) {
         if (event.data?.type === 'lwa-github-error' && event.data.domain === domain) {
           setStatus('err', event.data.error)
           window.removeEventListener('message', handler)
         }
+        if (event.data?.type === 'lwa-github-dispatched' && event.data.domain === domain) {
+          setStatus('wait', `Run #${event.data.result?.runId || '?'} dispatched. Verifying on forum via TEE...`)
+        }
         if (event.data?.type === 'lwa-github-result' && event.data.domain === domain) {
           const r = event.data.result
-          setStatus('ok', `Dispatched run #${r?.runId || '?'} — see the status tab for live progress`)
+          // If TEE verification also succeeded, log into the forum
+          if (r?.session?.sessionToken) {
+            saveSession(currentBoard.id, r.session.sessionToken, r.session.identity, r.session.evidence)
+            activateSession(r.session.sessionToken, r.session.identity, r.session.evidence)
+            setStatus('ok', `Verified! Run #${r?.runId || '?'} — see status tab`)
+          } else {
+            setStatus('ok', `Dispatched run #${r?.runId || '?'} — see the status tab`)
+          }
           window.removeEventListener('message', handler)
+          loadPosts(currentBoard.id)
         }
       }
       window.addEventListener('message', handler)

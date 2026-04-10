@@ -22,13 +22,33 @@ window.addEventListener('message', async (event) => {
 
   if (event.data?.type === 'lwa-request-github-verify') {
     const domain = event.data.domain
-    // Run the full dispatch and wait for the result so errors surface.
+    const boardId = event.data.boardId
     try {
+      // 1. Dispatch GitHub Actions (opens status tab with live steps)
       const res = await chrome.runtime.sendMessage({
         type: 'verifyViaGitHub', domain, forumUrl: window.location.origin
       })
       if (res?.error) {
         window.postMessage({ type: 'lwa-github-error', error: res.error, domain }, '*')
+        return
+      }
+      window.postMessage({ type: 'lwa-github-dispatched', result: res, domain }, '*')
+
+      // 2. Also run TEE verification to create a forum session.
+      // This way the user is logged into the forum AND gets the GitHub attestation.
+      const cookies = await chrome.runtime.sendMessage({ type: 'getCookies', domain })
+      if (cookies?.length) {
+        const formatted = cookies.map(c => ({
+          name: c.name, value: c.value, domain: c.domain, path: c.path,
+          secure: c.secure, httpOnly: c.httpOnly, sameSite: c.sameSite
+        }))
+        const verifyRes = await fetch(window.location.origin + '/api/verify-cookie', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ boardId, cookies: formatted, site: domain })
+        })
+        const data = await verifyRes.json()
+        window.postMessage({ type: 'lwa-github-result', result: { ...res, session: data }, domain }, '*')
       } else {
         window.postMessage({ type: 'lwa-github-result', result: res, domain }, '*')
       }
