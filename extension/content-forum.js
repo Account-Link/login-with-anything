@@ -22,13 +22,18 @@ window.addEventListener('message', async (event) => {
 
   if (event.data?.type === 'lwa-request-github-verify') {
     const domain = event.data.domain
-    // Respond immediately — the service worker will open a status tab
-    // with live step streaming. No need to block the forum page.
-    window.postMessage({ type: 'lwa-github-result', result: { dispatching: true }, domain }, '*')
-    chrome.runtime.sendMessage({
-      type: 'verifyViaGitHub', domain, forumUrl: window.location.origin
-    }).catch(e => {
+    // Run the full dispatch and wait for the result so errors surface.
+    try {
+      const res = await chrome.runtime.sendMessage({
+        type: 'verifyViaGitHub', domain, forumUrl: window.location.origin
+      })
+      if (res?.error) {
+        window.postMessage({ type: 'lwa-github-error', error: res.error, domain }, '*')
+      } else {
+        window.postMessage({ type: 'lwa-github-result', result: res, domain }, '*')
+      }
+    } catch (e) {
       window.postMessage({ type: 'lwa-github-error', error: e.message, domain }, '*')
-    })
+    }
   }
 })

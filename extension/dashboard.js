@@ -192,7 +192,15 @@ async function fetchOneFrame() {
   }
   try {
     const res = await fetch(`${bridgeUrl}/screenshot?_=${Date.now()}`, { cache: 'no-store' })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    if (!res.ok) {
+      // 500 "No screenshot" happens when the browser has no active page.
+      // Show a friendly message instead of a scary error.
+      $('viewerFrame').style.display = 'none'
+      $('viewerEmpty').style.display = 'block'
+      $('viewerEmpty').innerHTML = '<h2>Browser idle</h2><p>The TEE browser has no page loaded. Run a verification to see it in action.</p>'
+      setViewerStatus('Waiting for activity...', 'paused')
+      return
+    }
     const blob = await res.blob()
     if (lastObjectUrl) URL.revokeObjectURL(lastObjectUrl)
     lastObjectUrl = URL.createObjectURL(blob)

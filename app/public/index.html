@@ -449,19 +449,17 @@
       let domain
       try { domain = new URL(currentBoard.site).hostname.replace(/^www\./, '') } catch { domain = currentBoard.site.replace(/^www\./, '') }
 
-      setStatus('wait', `Dispatching GitHub Actions for ${domain}... A status tab will open.`)
+      setStatus('wait', `Grabbing ${domain} cookies and dispatching GitHub Actions... (takes ~15s)`)
       window.postMessage({ type: 'lwa-request-github-verify', domain }, '*')
 
-      // The content script responds immediately and fires the dispatch async.
-      // The service worker opens a status tab with live step streaming.
-      // We just listen for errors.
       function handler(event) {
         if (event.data?.type === 'lwa-github-error' && event.data.domain === domain) {
           setStatus('err', event.data.error)
           window.removeEventListener('message', handler)
         }
         if (event.data?.type === 'lwa-github-result' && event.data.domain === domain) {
-          setStatus('ok', 'Dispatched — see the status tab for live progress')
+          const r = event.data.result
+          setStatus('ok', `Dispatched run #${r?.runId || '?'} — see the status tab for live progress`)
           window.removeEventListener('message', handler)
         }
       }
