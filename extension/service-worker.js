@@ -97,11 +97,10 @@ async function verifyViaGitHub({ domain, forumUrl, boardId, verifyUrl }) {
   let runId = null
   for (let i = 0; i < 10; i++) {
     await new Promise(r => setTimeout(r, 2000))
-    const runsRes = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/verify.yml/runs?per_page=1&event=workflow_dispatch`, { headers })
+    const runsRes = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/verify.yml/runs?per_page=1&event=workflow_dispatch&_=${Date.now()}`, { headers, cache: 'no-store' })
     const runs = await runsRes.json()
     const run = runs.workflow_runs?.[0]
-    // Pick a run that was created in the last 30s — handles concurrent dispatches better than per_page=1 alone
-    if (run && (Date.now() - new Date(run.created_at).getTime()) < 30000) {
+    if (run && (run.status === 'queued' || run.status === 'in_progress')) {
       runId = run.id
       break
     }
